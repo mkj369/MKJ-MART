@@ -28,7 +28,8 @@ export default async function HomePage() {
             src="/images/demo/editorial/hero-kahn.webp"
             alt="Two models in an ivory panjabi and a sage kurta beside monumental concrete architecture in Dhaka"
             fill
-            priority
+            loading="eager"
+            fetchPriority="high"
             sizes="100vw"
             className="animate-fade-in object-cover object-[78%_center] lg:object-center"
           />

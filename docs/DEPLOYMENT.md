@@ -39,8 +39,7 @@ npm run build
 npm run db:migrate          # run on every release (idempotent)
 npm run db:seed             # first deploy only: sizes, colours, delivery zones (NO demo data)
 npm run admin:create -- --email owner@yourdomain.com --name "Owner" --password '<long passphrase>'
-npm start                   # or the standalone server: copy public/ and .next/static/ into
-                            # .next/standalone/ (as the Dockerfile does) and run node .next/standalone/server.js
+npm start                   # (Docker images use the leaner standalone server — see Dockerfile)
 ```
 
 With Docker Compose: `docker compose up -d --build`, then

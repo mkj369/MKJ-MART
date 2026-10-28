@@ -45,7 +45,7 @@ export function ProductGallery({ images, name, activeColorId }: { images: Produc
         </div>
       ) : null}
       <div className="relative aspect-[3/4] flex-1 overflow-hidden bg-linen">
-        <Image key={current.id} src={current.url} alt={current.alt || name} fill priority sizes="(min-width: 1024px) 50vw, 100vw" className="animate-fade-in object-cover" />
+        <Image key={current.id} src={current.url} alt={current.alt || name} fill loading="eager" fetchPriority="high" sizes="(min-width: 1024px) 50vw, 100vw" className="animate-fade-in object-cover" />
       </div>
     </div>
   );

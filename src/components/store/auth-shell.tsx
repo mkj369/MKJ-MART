@@ -4,7 +4,7 @@ export function AuthShell({ eyebrow, title, subtitle, children }: { eyebrow: str
   return (
     <div className="container-x grid gap-12 pt-10 lg:grid-cols-2 lg:gap-20 lg:pt-14">
       <div className="relative hidden aspect-[4/5] overflow-hidden bg-linen lg:block">
-        <Image src="/images/demo/editorial/couple-portrait.webp" alt="" fill sizes="45vw" className="object-cover" priority />
+        <Image src="/images/demo/editorial/couple-portrait.webp" alt="" fill sizes="45vw" className="object-cover" loading="eager" />
         <div className="absolute inset-0 bg-gradient-to-t from-ink/55 to-transparent" />
         <p className="absolute bottom-10 left-10 right-10 font-display text-[30px] font-light leading-tight text-paper">
           “Considered clothing, made to be worn for years.”

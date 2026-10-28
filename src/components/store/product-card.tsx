@@ -17,7 +17,7 @@ export function ProductCard({ product, priority = false, className }: { product:
               src={product.image.url}
               alt={product.image.alt}
               fill
-              priority={priority}
+              loading={priority ? 'eager' : 'lazy'}
               sizes="(min-width: 1280px) 22vw, (min-width: 768px) 30vw, 48vw"
               className={cn(
                 'object-cover transition-[transform,opacity] duration-[1200ms] ease-[var(--ease-luxe)] group-hover:scale-[1.035]',

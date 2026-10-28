@@ -15,8 +15,9 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  // Produces a self-contained server in .next/standalone (used by the Dockerfile).
-  output: 'standalone',
+  // Docker builds set BUILD_STANDALONE=1 to produce a self-contained server in .next/standalone.
+  // Regular builds stay compatible with `npm start`.
+  output: process.env.BUILD_STANDALONE === '1' ? 'standalone' : undefined,
   poweredByHeader: false,
   reactStrictMode: true,
   // Allow remote preview/tunnel hosts to load dev assets (development only).

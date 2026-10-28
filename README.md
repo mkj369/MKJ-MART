@@ -193,7 +193,7 @@ npm run build && npm run test:e2e   # 10 Playwright scenarios against the produc
 
 ## 8. Deployment
 
-The app is a standard Node.js server (`output: 'standalone'`). Full checklist in
+The app is a standard Node.js server (`npm start`; Docker builds use Next's standalone output via `BUILD_STANDALONE=1`). Full checklist in
 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). In short:
 
 **Docker (single server / VPS)**

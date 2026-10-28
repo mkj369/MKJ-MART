@@ -27,7 +27,7 @@ export default async function CollectionPage({ params, searchParams }: Props) {
     <>
       <header className="relative overflow-hidden bg-ink text-paper">
         {collection.imageUrl ? (
-          <Image src={collection.imageUrl} alt="" fill priority sizes="100vw" className="object-cover object-center opacity-45" />
+          <Image src={collection.imageUrl} alt="" fill loading="eager" fetchPriority="high" sizes="100vw" className="object-cover object-center opacity-45" />
         ) : null}
         <div className="absolute inset-0 bg-gradient-to-r from-ink/80 via-ink/40 to-transparent" />
         <div className="container-x relative py-20 lg:py-28">
