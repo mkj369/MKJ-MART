@@ -3,6 +3,9 @@ import { Toaster } from 'sonner';
 import { bengali, cormorant, jost, taka } from './fonts';
 import './globals.css';
 
+// Every page depends on the session, live prices and stock — always render per request.
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: {
     default: 'MKJ Store — Considered clothing, made in Bangladesh',

@@ -507,11 +507,13 @@ export function CheckoutForm({
           </Button>
           <p className="mt-4 flex items-start gap-2 text-[12px] leading-relaxed text-muted">
             <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            Prices and stock are verified again when you place your order. By ordering you agree to our{' '}
-            <Link href="/policies/terms" className="underline underline-offset-2">
-              terms
-            </Link>
-            .
+            <span>
+              Prices and stock are verified again when you place your order. By ordering you agree to our{' '}
+              <Link href="/policies/terms" className="underline underline-offset-2">
+                terms
+              </Link>
+              .
+            </span>
           </p>
         </div>
       </aside>

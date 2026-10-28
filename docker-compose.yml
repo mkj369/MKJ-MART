@@ -1,0 +1,60 @@
+# Local / single-server stack: PostgreSQL + one-off migration job + the app.
+#
+#   docker compose up -d db                       # just the database (for `npm run dev`)
+#   docker compose up -d --build                  # full stack on http://localhost:3000
+#   docker compose run --rm tools npm run db:seed -- --demo        # optional demo data
+#   docker compose run --rm tools npm run admin:create -- --email you@example.com --password '…'
+#
+# Change the passwords below (and APP_URL) before exposing this anywhere.
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mkj
+      POSTGRES_PASSWORD: mkj_local_dev
+      POSTGRES_DB: mkj_mart
+    ports:
+      - '127.0.0.1:5433:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U mkj -d mkj_mart']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Full toolchain image (build stage) for migrations, seeding and admin tasks.
+  tools:
+    build:
+      context: .
+      target: build
+    environment:
+      DATABASE_URL: postgres://mkj:mkj_local_dev@db:5432/mkj_mart
+    command: npm run db:migrate
+    depends_on:
+      db:
+        condition: service_healthy
+
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      DATABASE_URL: postgres://mkj:mkj_local_dev@db:5432/mkj_mart
+      APP_URL: http://localhost:3000
+      COOKIE_SECURE: 'false' # set to auto/true behind HTTPS
+      SSLCOMMERZ_STORE_ID: ${SSLCOMMERZ_STORE_ID:-}
+      SSLCOMMERZ_STORE_PASSWORD: ${SSLCOMMERZ_STORE_PASSWORD:-}
+      SSLCOMMERZ_MODE: ${SSLCOMMERZ_MODE:-sandbox}
+      CRON_SECRET: ${CRON_SECRET:-}
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      tools:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:
+  uploads:

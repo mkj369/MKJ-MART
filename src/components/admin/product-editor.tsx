@@ -190,7 +190,7 @@ export function ProductEditor({ options, product }: { options: Options; product?
                 />
               )}
             </Field>
-            <Field label="URL slug" error={errors.slug} hint={`mkjstore.com/products/${slug || 'your-product'}`}>
+            <Field label="URL slug" error={errors.slug} hint={`URL: /products/${slug || 'your-product'}`}>
               {(p) => (
                 <Input
                   {...p}
