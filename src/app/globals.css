@@ -1,0 +1,187 @@
+@import 'tailwindcss';
+
+/*
+ * MKJ Store design tokens.
+ * Palette: ink & paper with warm bone neutrals and a restrained antique-gold accent.
+ * Type: Cormorant Garamond (display) + Jost (text). A 1 KB "Taka" subset guarantees the ৳ glyph.
+ */
+@theme {
+  --color-ink: #0e0e0e;
+  --color-ink-soft: #262626;
+  --color-paper: #ffffff;
+  --color-bone: #f7f5f0;
+  --color-linen: #eae6de;
+  --color-line: #e7e3db;
+  --color-line-strong: #d3cdc1;
+  --color-muted: #6b665e;
+  --color-faint: #9a958c;
+  --color-gold: #a88454;
+  --color-gold-deep: #84653a;
+  --color-gold-light: #d8c39f;
+  --color-danger: #9b2c2c;
+  --color-danger-soft: #f9eeee;
+  --color-success: #2f5d46;
+  --color-success-soft: #ecf4ef;
+  --color-warning: #85570f;
+  --color-warning-soft: #fbf4e6;
+  --color-info: #2e4a6b;
+  --color-info-soft: #edf2f8;
+
+  --ease-luxe: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --animate-fade-up: fade-up 0.8s var(--ease-luxe) both;
+  --animate-fade-in: fade-in 0.6s var(--ease-luxe) both;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(14px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes shimmer {
+    from {
+      background-position: -200% 0;
+    }
+    to {
+      background-position: 200% 0;
+    }
+  }
+}
+
+@theme inline {
+  --font-sans: var(--font-jost), var(--font-taka), var(--font-bengali), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: var(--font-cormorant), var(--font-taka), var(--font-bengali), Georgia, 'Times New Roman', serif;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  ::selection {
+    background: var(--color-gold-light);
+    color: var(--color-ink);
+  }
+  :focus-visible {
+    outline: 1.5px solid var(--color-gold);
+    outline-offset: 3px;
+  }
+  input,
+  select,
+  textarea {
+    accent-color: var(--color-ink);
+  }
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+}
+
+/* Small tracked uppercase label used throughout ("eyebrow"). */
+@utility eyebrow {
+  font-family: var(--font-sans);
+  font-size: 0.6875rem;
+  line-height: 1.2;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+@utility container-x {
+  width: 100%;
+  max-width: 1440px;
+  margin-inline: auto;
+  padding-inline: 1.25rem;
+  @media (width >= 48rem) {
+    padding-inline: 2rem;
+  }
+  @media (width >= 80rem) {
+    padding-inline: 3rem;
+  }
+}
+
+/* Hairline with a gold centre — a recurring brand detail. */
+@utility rule-gold {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--color-gold) 50%, transparent);
+}
+
+@utility skeleton {
+  background: linear-gradient(90deg, var(--color-bone) 0%, var(--color-linen) 50%, var(--color-bone) 100%);
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
+}
+
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Native select with a refined chevron. */
+@utility select-chevron {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%230e0e0e' stroke-width='1.5'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.9rem center;
+  padding-right: 2.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@keyframes sheet-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes sheet-in-left {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: none;
+  }
+}
