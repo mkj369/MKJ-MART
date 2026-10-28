@@ -9,6 +9,17 @@ export const metadata: Metadata = { title: 'Coupons' };
 export default async function CouponsPage() {
   await requireAdminPage('coupons:manage', '/admin/coupons');
   const coupons = await listCouponsAdmin();
+  const now = new Date();
+  const stateOf = (c: (typeof coupons)[number]) =>
+    !c.isActive
+      ? ('inactive' as const)
+      : c.endsAt && c.endsAt < now
+        ? ('expired' as const)
+        : c.startsAt && c.startsAt > now
+          ? ('scheduled' as const)
+          : c.usageLimit !== null && c.usedCount >= c.usageLimit
+            ? ('used_up' as const)
+            : ('live' as const);
   return (
     <>
       <PageHeader title="Coupons & discounts" description="Discounts apply to merchandise (not delivery), are validated server-side, and per-customer limits match account or phone." />
@@ -28,6 +39,7 @@ export default async function CouponsPage() {
           usedCount: c.usedCount,
           isActive: c.isActive,
           isDemo: c.isDemo,
+          state: stateOf(c),
         }))}
       />
     </>

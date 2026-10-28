@@ -1,7 +1,7 @@
 import 'server-only';
 import { and, desc, eq, gte, inArray, lt, lte, sql } from 'drizzle-orm';
 import { db } from '@/server/db';
-import { colors, orderItems, orders, productImages, products, productVariants, sizes, users } from '@/server/db/schema';
+import { colors, orderItems, orders, products, productVariants, sizes, users } from '@/server/db/schema';
 import { getSetting } from '../settings';
 import { VALID_ORDER_SQL } from './customers';
 

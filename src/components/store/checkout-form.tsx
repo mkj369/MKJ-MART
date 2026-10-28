@@ -74,7 +74,10 @@ export function CheckoutForm({
   const [appliedCoupon, setAppliedCoupon] = useState<string | undefined>();
   const [note, setNote] = useState('');
   const [quote, setQuote] = useState(initialQuote);
-  const [quoting, setQuoting] = useState(false);
+  // The quote is "in flight" whenever the inputs differ from the ones it was computed for.
+  const quoteKey = `${address.district}|${appliedCoupon ?? ''}`;
+  const [quotedKey, setQuotedKey] = useState(`${defaultAddress?.district ?? ''}|`); // initialQuote was computed for these inputs
+  const quoting = quotedKey !== quoteKey;
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [problems, setProblems] = useState<StockProblem[] | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -83,7 +86,7 @@ export function CheckoutForm({
   // Live re-quote whenever the district or coupon changes (delivery fee, discount, payment options).
   useEffect(() => {
     const controller = new AbortController();
-    setQuoting(true);
+    const requestedKey = quoteKey;
     void api<CheckoutQuote>('/api/v1/checkout/quote', {
       body: { district: address.district || undefined, couponCode: appliedCoupon, phone: contact.phone || undefined },
       signal: controller.signal,
@@ -100,7 +103,7 @@ export function CheckoutForm({
           if (fallback) setPaymentMethod(fallback.method);
         }
       }
-      if (!(result.ok === false && result.error.code === 'ABORTED')) setQuoting(false);
+      if (!(result.ok === false && result.error.code === 'ABORTED')) setQuotedKey(requestedKey);
     });
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps

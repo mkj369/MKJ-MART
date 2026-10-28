@@ -14,8 +14,7 @@ import { POST as checkout } from '@/app/api/v1/checkout/route';
 import { GET as health } from '@/app/api/v1/health/route';
 import { createProduct, createUser, seedReferenceData } from '../support/fixtures';
 
-type Ctx = { params: Promise<Record<string, string>> };
-const ctx = (params: Record<string, string> = {}): Ctx => ({ params: Promise.resolve(params) });
+const ctx = <P extends Record<string, string> = Record<string, never>>(params?: P) => ({ params: Promise.resolve((params ?? {}) as P) });
 
 function request(path: string, init: { method?: string; body?: unknown; cookie?: string; headers?: Record<string, string>; rawBody?: string } = {}) {
   const headers: Record<string, string> = { 'sec-fetch-site': 'same-origin', ...(init.headers ?? {}) };

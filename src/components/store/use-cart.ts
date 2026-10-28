@@ -30,8 +30,18 @@ export function useCart(options: { enabled: boolean; initial?: CartView | null }
   }, [apply]);
 
   useEffect(() => {
-    if (options.enabled) void reload();
-  }, [options.enabled, reload]);
+    if (!options.enabled) return;
+    let cancelled = false;
+    void api<CartView>('/api/v1/cart').then((result) => {
+      if (cancelled) return;
+      setLoading(false);
+      if (result.ok) apply(result.data);
+      else toast.error(result.error.message);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [options.enabled, apply]);
 
   const updateQuantity = useCallback(
     async (line: CartLine, quantity: number) => {

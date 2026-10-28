@@ -1,7 +1,7 @@
 import 'server-only';
 import { asc, eq, sql } from 'drizzle-orm';
 import { db } from '@/server/db';
-import { categories, collectionProducts, collections, colors, products, productVariants, sizes } from '@/server/db/schema';
+import { categories, collections, colors, products, productVariants, sizes } from '@/server/db/schema';
 import { conflict, isUniqueViolation, notFound, validationError } from '@/server/errors';
 import { slugify } from '@/lib/utils';
 import type { CategoryInput, CollectionInput } from '@/lib/validation/admin';

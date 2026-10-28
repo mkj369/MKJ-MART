@@ -21,13 +21,21 @@ export function SiteHeader({ categories, collections }: { categories: NavCategor
   const [searchOpen, setSearchOpen] = useState(false);
   const pathname = usePathname();
 
+  const [lastPath, setLastPath] = useState(pathname);
+  if (lastPath !== pathname) {
+    setLastPath(pathname);
+    setMenuOpen(false);
+  }
+
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
-    onScroll();
+    const frame = requestAnimationFrame(onScroll);
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', onScroll);
+    };
   }, []);
-  useEffect(() => setMenuOpen(false), [pathname]);
 
   const accountHref = user ? (user.role === 'customer' ? '/account' : '/admin') : '/login';
   const iconBtn = 'relative flex h-10 w-10 items-center justify-center text-ink transition-opacity hover:opacity-60';

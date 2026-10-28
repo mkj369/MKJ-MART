@@ -1,7 +1,7 @@
 import 'server-only';
 import { and, asc, count, desc, eq, gt, ilike, lte, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/server/db';
-import { colors, productImages, products, productVariants, sizes, stockMovements, users } from '@/server/db/schema';
+import { colors, products, productVariants, sizes, stockMovements, users } from '@/server/db/schema';
 import { notFound, validationError } from '@/server/errors';
 import type { StockAdjustmentInput } from '@/lib/validation/admin';
 import { recordEvent } from '../events';

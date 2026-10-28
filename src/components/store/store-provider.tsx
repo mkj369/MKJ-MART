@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { api } from '@/lib/api-client';
@@ -49,9 +49,17 @@ export function StoreProvider({
   const [wishlistIds, setWishlistIds] = useState(initialWishlistIds);
   const [cartOpen, setCartOpen] = useState(false);
 
-  // Server re-renders (router.refresh, navigation) are the source of truth.
-  useEffect(() => setCartCount(initialCartCount), [initialCartCount]);
-  useEffect(() => setWishlistIds(initialWishlistIds), [initialWishlistIds]);
+  // Server re-renders (router.refresh, navigation) are the source of truth: adopt new values.
+  const [serverCartCount, setServerCartCount] = useState(initialCartCount);
+  const [serverWishlist, setServerWishlist] = useState(initialWishlistIds);
+  if (serverCartCount !== initialCartCount) {
+    setServerCartCount(initialCartCount);
+    setCartCount(initialCartCount);
+  }
+  if (serverWishlist !== initialWishlistIds) {
+    setServerWishlist(initialWishlistIds);
+    setWishlistIds(initialWishlistIds);
+  }
 
   const isWishlisted = useCallback((id: string) => wishlistIds.includes(id), [wishlistIds]);
 

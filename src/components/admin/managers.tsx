@@ -95,9 +95,10 @@ type CouponRow = {
   usedCount: number;
   isActive: boolean;
   isDemo: boolean;
+  state: 'live' | 'inactive' | 'expired' | 'scheduled' | 'used_up';
 };
 
-type CouponForm = Omit<CouponRow, 'id' | 'usedCount' | 'isDemo' | 'description'> & { description: string };
+type CouponForm = Omit<CouponRow, 'id' | 'usedCount' | 'isDemo' | 'description' | 'state'> & { description: string };
 
 const toLocalInput = (iso: string | null) => (iso ? new Date(new Date(iso).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '');
 
@@ -106,14 +107,13 @@ export function CouponManager({ coupons }: { coupons: CouponRow[] }) {
   const [editing, setEditing] = useState<{ id: string | null; form: CouponForm } | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
-  const now = Date.now();
 
   const open = (c?: CouponRow) => {
     setErrors({});
     setEditing({
       id: c?.id ?? null,
       form: c
-        ? { ...c, description: c.description ?? '' }
+        ? (({ id: _id, usedCount: _u, isDemo: _d, state: _s, ...rest }) => ({ ...rest, description: c.description ?? '' }))(c)
         : { code: '', description: '', type: 'percentage', value: 10, minOrderAmount: 0, maxDiscountAmount: null, startsAt: null, endsAt: null, usageLimit: null, usageLimitPerCustomer: 1, isActive: true },
     });
   };
@@ -142,13 +142,14 @@ export function CouponManager({ coupons }: { coupons: CouponRow[] }) {
     router.refresh();
   };
 
-  const state = (c: CouponRow) => {
-    if (!c.isActive) return <Badge>Inactive</Badge>;
-    if (c.endsAt && new Date(c.endsAt).getTime() < now) return <Badge tone="danger">Expired</Badge>;
-    if (c.startsAt && new Date(c.startsAt).getTime() > now) return <Badge tone="info">Scheduled</Badge>;
-    if (c.usageLimit !== null && c.usedCount >= c.usageLimit) return <Badge tone="warning">Used up</Badge>;
-    return <Badge tone="success">Live</Badge>;
-  };
+  const state = (c: CouponRow) =>
+    ({
+      inactive: <Badge>Inactive</Badge>,
+      expired: <Badge tone="danger">Expired</Badge>,
+      scheduled: <Badge tone="info">Scheduled</Badge>,
+      used_up: <Badge tone="warning">Used up</Badge>,
+      live: <Badge tone="success">Live</Badge>,
+    })[c.state];
 
   const f = editing?.form;
   return (

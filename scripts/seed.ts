@@ -301,9 +301,10 @@ async function seedDemo() {
         .where(eq(orderEvents.id, event.id));
     }
     const at = (i: number) => new Date(placedAt.getTime() + i * hourStep * 3_600_000);
+    const backdatedNumber = generateOrderNumber(placedAt);
     await db.execute(sql`
       UPDATE ${orders} SET
-        order_number = ${generateOrderNumber(placedAt)},
+        order_number = ${backdatedNumber},
         placed_at = ${placedAt}, created_at = ${placedAt},
         confirmed_at = CASE WHEN confirmed_at IS NOT NULL THEN ${at(1)}::timestamptz END,
         shipped_at = CASE WHEN shipped_at IS NOT NULL THEN ${at(3)}::timestamptz END,
@@ -312,7 +313,10 @@ async function seedDemo() {
         cancelled_at = CASE WHEN cancelled_at IS NOT NULL THEN ${at(1)}::timestamptz END
       WHERE id = ${result.orderId}
     `);
-    await db.update(stockMovements).set({ createdAt: placedAt }).where(eq(stockMovements.orderId, result.orderId));
+    await db
+      .update(stockMovements)
+      .set({ createdAt: placedAt, note: sql`replace(${stockMovements.note}, ${result.orderNumber}, ${backdatedNumber})` })
+      .where(eq(stockMovements.orderId, result.orderId));
   }
   console.log(`  • ${DEMO_ORDERS.length} demo orders across the last 30 days (placed via the real checkout flow)`);
 

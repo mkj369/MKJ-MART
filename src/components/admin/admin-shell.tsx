@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   BadgePercent,
   Boxes,
@@ -51,7 +51,12 @@ export function AdminShell({
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  useEffect(() => setOpen(false), [pathname]);
+  const [lastPath, setLastPath] = useState(pathname);
+  if (lastPath !== pathname) {
+    // Close the mobile drawer when the route changes (state adjustment during render, no effect needed).
+    setLastPath(pathname);
+    setOpen(false);
+  }
 
   const items = NAV.filter((n) => can(user.role, n.permission));
   const groups = [...new Set(items.map((i) => i.group))];
