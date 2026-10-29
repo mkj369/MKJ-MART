@@ -104,3 +104,20 @@ Payment statuses: `unpaid` (COD), `pending` (awaiting gateway), `paid`, `failed`
 6. Insert order + items; decrement stock with `WHERE stock >= qty`; write ledger, coupon redemption, timeline
    and outbox events; empty the cart; create the payment transaction for online payment.
 7. After commit, create the SSLCommerz session; on failure cancel the order, release stock and restore the bag.
+
+## Hardening additions (migration `0001_hardening`)
+
+| Table / column | Purpose |
+| --- | --- |
+| `user_tokens` | Password-reset tokens: only the SHA-256 is stored, `expires_at`, single use (`used_at`). |
+| `notifications` | Email/SMS outbox: template, recipient, payload, `secret_payload` (erased after delivery), `status` pending/sent/failed/skipped, attempts, `next_attempt_at`, provider message id, `last_error`. |
+| `return_requests`, `return_request_items` | Return workflow (requested → approved → received → refunded, or rejected/cancelled) and the order items/quantities being returned. |
+| `refunds` | Ledger of refunds paid outside the platform (amount, method, reference, actor), optionally linked to a return. |
+| `support_requests` | Contact-form tickets (`SR-…`), status open/in_progress/resolved, internal notes. Requires an email or phone. |
+| `job_runs` | Heartbeat per scheduled job (last start/success/failure, last result). |
+| `orders.tracking_url` | Courier tracking link shown to customers and in shipping emails. |
+| `orders.refunded_total` | Sum of recorded refunds; CHECK `0 ≤ refunded_total ≤ total`. |
+| `payment_status` += `partially_refunded` | Set when recorded refunds are below the order total. |
+
+All changes are additive; the migration was applied both on top of `0000_init` and from scratch on an empty
+database.

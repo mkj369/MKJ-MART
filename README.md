@@ -9,8 +9,8 @@ zones, returns & refunds, email/SMS notifications and a complete back office.
 | --- | --- |
 | Home, shop with search/filters/sort/pagination, collections, product pages (sizes, colours, live stock), bag, checkout (COD / online), order page with "Pay now" retry, public tracking with courier links, accounts (profile, addresses, history, wishlist, password, **forgot-password by email**), **return requests**, **Help & contact** page with FAQ and contact form | Dashboard, orders workflow (tracking links, notifications log, gateway reconciliation, refund ledger), **returns**, **support inbox**, products & variants & images, inventory ledger, categories, collections, sizes & colours, customers & roles, coupons, delivery zones, settings (business details, notifications with test send, returns, policies with review flags), **launch-readiness checklist**, scheduled-job heartbeats, safe demo-data removal |
 
-> **Status (honest):** builds, migrates on an empty database and passes 213 unit/integration tests and
-> 24 browser E2E tests. The full production stack (standalone build behind Caddy HTTPS, migrations,
+> **Status (honest):** builds, migrates on an empty database and passes 212 unit/integration tests (1 more
+> runs only in CI against MinIO) and 24 browser E2E tests. The full production stack (standalone build behind Caddy HTTPS, migrations,
 > first-admin procedure, scheduler, backups and a restore) was rehearsed end-to-end. **Not verified:**
 > SSLCommerz against the real sandbox (needs credentials; see [docs/SSLCOMMERZ.md](docs/SSLCOMMERZ.md)),
 > real SMTP/SMS providers (tested with a local SMTP server and a local HTTP SMS gateway), and the Docker
@@ -154,7 +154,7 @@ credentials** — run `npm run payments:sandbox-check` and the checklist in [doc
 ## 7. Testing
 
 ```bash
-npm test                              # 213 unit + integration tests (real PostgreSQL, real SMTP server)
+npm test                              # 212 unit + integration tests (real PostgreSQL, real SMTP server; +1 S3 test in CI)
 npm run build && npm run test:e2e     # 24 Playwright scenarios (desktop + mobile) against the production build
 ```
 

@@ -107,3 +107,24 @@ only after the SSLCommerz Validation API confirms status, `tran_id`, amount and 
 `POST $ECOSYSTEM_WEBHOOK_URL` with body `{ id, type, aggregateId, occurredAt, source: "mkj-mart", data }` and headers
 `X-MKJ-Event`, `X-MKJ-Timestamp`, `X-MKJ-Signature: sha256=HMAC_SHA256(secret, "<timestamp>.<body>")`. Deliveries are
 ordered and retried (up to 10 attempts) by `npm run jobs:dispatch-events`.
+
+## Hardening additions
+
+| Method & path | Who | Purpose |
+| --- | --- | --- |
+| `POST /auth/password/forgot` | anyone | `{ email }` → always the same answer; emails a reset link to eligible customer accounts |
+| `POST /auth/password/reset` | anyone | `{ token, password }` → resets, revokes all sessions, signs in |
+| `POST /orders/{orderNumber}/pay` | owner / token | New SSLCommerz session for a pending order whose attempt failed (while the window is open) |
+| `POST /orders/{orderNumber}/returns` | owner / token | `{ items[{orderItemId, quantity}], reason, note? }` → return request |
+| `POST /orders/{orderNumber}/returns/{requestNumber}/withdraw` | owner / token | Withdraw a request not yet handled |
+| `POST /support` | anyone | Contact form → ticket reference |
+| `GET /admin/returns`, `GET·PATCH /admin/returns/{id}` | `returns:manage` | List; approve / reject / receive (restock) |
+| `POST /admin/orders/{id}/refunds` | `refunds:manage` (admin) | Record a refund already paid outside the platform (`confirmPaidOutside: true` required) |
+| `POST /admin/orders/{id}/reconcile` | `orders:manage` | Ask SSLCommerz (Transaction Query API) whether the order was paid |
+| `PUT /admin/orders/{id}/shipping` | `orders:manage` | Edit courier / tracking number / tracking link |
+| `GET /admin/support`, `GET·PATCH /admin/support/{id}` | `support:manage` | Support inbox |
+| `GET /admin/notifications`, `POST /admin/notifications/test` | `settings:manage` | Notification log; send a real test email/SMS |
+| `POST /api/cron/send-notifications` | `Bearer CRON_SECRET` | Deliver/retry queued notifications (also `expire-payments`, `dispatch-events`) |
+
+`POST /admin/orders/{id}/status` additionally accepts `trackingUrl` (https). `POST /admin/orders/{id}/payment`
+now only supports `mark_paid` (COD); refunds use the refund ledger above.
