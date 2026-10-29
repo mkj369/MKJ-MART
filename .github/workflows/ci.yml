@@ -27,8 +27,13 @@ jobs:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
       E2E_DATABASE_URL: postgres://postgres:postgres@localhost:5432/mkj_e2e
       NEXT_TELEMETRY_DISABLED: 1
-      # Storage tests run against MinIO, which verifies AWS Signature V4 (s3rver does not).
+      # Storage tests run against Silo, a maintained MinIO fork that verifies AWS Signature V4
+      # (s3rver does not). MinIO deleted minio/minio and minio/mc from Docker Hub in September 2026.
       S3_TEST_ENDPOINT: http://127.0.0.1:9000
+      S3_TEST_ACCESS_KEY_ID: mkj-ci
+      S3_TEST_SECRET_ACCESS_KEY: mkj-ci-throwaway-key-2026 # disposable CI-only container, not a real secret
+      # Pinned by digest so the job cannot break again when an upstream tag is moved or deleted.
+      SILO_IMAGE: docker.io/pgsty/silo:RELEASE.2026-10-26T00-00-00Z@sha256:7bb2aff6b89efe1cb1303c10fc21d579447434ed06649ac9ec05a5e2dbf30ad7
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,11 +43,23 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
-      - name: Start MinIO (S3-compatible object storage)
+      - name: Start S3-compatible object storage (Silo)
         run: |
-          docker run -d --name minio -p 9000:9000 -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin minio/minio:latest server /data
-          for i in $(seq 1 60); do curl -sf http://127.0.0.1:9000/minio/health/live && break; sleep 1; done
-          docker run --rm --network host --entrypoint sh minio/mc:latest -c "mc alias set local http://127.0.0.1:9000 minioadmin minioadmin && mc mb --ignore-existing local/mkj-media"
+          if ! docker run -d --name s3 -p 9000:9000 \
+              -e MINIO_ROOT_USER="$S3_TEST_ACCESS_KEY_ID" -e MINIO_ROOT_PASSWORD="$S3_TEST_SECRET_ACCESS_KEY" \
+              "$SILO_IMAGE" server /data; then
+            echo "::error title=S3 test server::Could not start $SILO_IMAGE"
+            exit 1
+          fi
+          for _ in $(seq 1 60); do curl -sf http://127.0.0.1:9000/minio/health/live && break; sleep 1; done
+          if ! curl -sf http://127.0.0.1:9000/minio/health/live; then
+            docker logs s3 2>&1 | tail -n 40
+            echo "::error title=S3 test server::Silo did not become healthy: $(docker logs s3 2>&1 | tail -n 3 | tr '\n' ' ')"
+            exit 1
+          fi
+          # The image bundles the MinIO-compatible client as `mcli`.
+          docker exec s3 mcli alias set local http://127.0.0.1:9000 "$S3_TEST_ACCESS_KEY_ID" "$S3_TEST_SECRET_ACCESS_KEY"
+          docker exec s3 mcli mb --ignore-existing local/mkj-media
       - name: Unit & integration tests (real PostgreSQL, SMTP, S3)
         run: npm test
       - run: npm run build

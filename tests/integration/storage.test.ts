@@ -9,8 +9,8 @@ import { GET as media } from '@/app/media/[...path]/route';
 
 /**
  * Upload validation and both storage drivers.
- * The S3 driver runs against S3_TEST_ENDPOINT when set (CI starts MinIO, which verifies AWS
- * Signature V4 and rejects bad credentials). Otherwise it falls back to s3rver, a local
+ * The S3 driver runs against S3_TEST_ENDPOINT when set (CI starts Silo, a maintained MinIO fork
+ * that verifies AWS Signature V4 and rejects bad credentials). Otherwise it falls back to s3rver, a local
  * S3-compatible server that exercises the protocol and paths but does NOT verify signatures — so
  * the bad-credentials case only runs against a real verifier.
  */
