@@ -53,6 +53,18 @@ export const passwordSchema = z
   .regex(/[A-Za-z]/, 'Include at least one letter.')
   .regex(/\d/, 'Include at least one number.');
 
+/** Staff/admin accounts: longer passwords, and never derived from the email address. */
+export const ADMIN_PASSWORD_MIN = 12;
+export function adminPasswordProblem(password: string, email?: string): string | null {
+  if (password.length < ADMIN_PASSWORD_MIN) return `Use at least ${ADMIN_PASSWORD_MIN} characters.`;
+  if (password.length > 128) return 'Password is too long.';
+  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) return 'Include at least one letter and one number.';
+  const local = email?.split('@')[0]?.toLowerCase();
+  if (local && local.length >= 3 && password.toLowerCase().includes(local)) return 'Do not include your email name in the password.';
+  if (/^(.)\1+$/.test(password) || /^(password|admin|qwerty|123456)/i.test(password)) return 'Choose a less predictable password.';
+  return null;
+}
+
 export const postalCodeSchema = z
   .string()
   .trim()

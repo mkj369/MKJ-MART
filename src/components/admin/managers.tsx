@@ -417,10 +417,41 @@ export function ShippingManager({ zones }: { zones: ZoneRow[] }) {
 // ─── Settings ─────────────────────────────────────────────────────────────────
 
 type SettingsData = {
-  store: { storeName: string; tagline: string; supportEmail: string; supportPhone: string; address: string; facebookUrl: string; instagramUrl: string };
+  store: {
+    storeName: string;
+    tagline: string;
+    supportEmail: string;
+    supportPhone: string;
+    whatsappNumber: string;
+    supportHours: string;
+    address: string;
+    legalName: string;
+    tradeLicense: string;
+    vatRegistration: string;
+    facebookUrl: string;
+    instagramUrl: string;
+  };
   checkout: { codEnabled: boolean; codMaxOrderAmount: number | null; onlinePaymentEnabled: boolean; guestCheckoutEnabled: boolean; freeShippingThreshold: number | null; maxQuantityPerItem: number; lowStockThreshold: number };
-  policies: { shipping: string; returns: string; privacy: string; terms: string };
+  policies: {
+    shipping: string;
+    returns: string;
+    privacy: string;
+    terms: string;
+    reviewed: { shipping: boolean; returns: boolean; privacy: boolean; terms: boolean };
+  };
   announcement: { enabled: boolean; message: string };
+  returns: { enabled: boolean; windowDays: number; instructions: string };
+  notifications: {
+    emailWelcome: boolean;
+    emailOrderUpdates: boolean;
+    emailReturnUpdates: boolean;
+    smsOrderUpdates: boolean;
+    staffEmail: string;
+    staffNewOrder: boolean;
+    staffNewReturn: boolean;
+    staffNewSupport: boolean;
+  };
+  support: { contactFormEnabled: boolean; responseTime: string; faq: string };
 };
 
 function useSettingsSave<K extends keyof SettingsData>(key: K) {
@@ -445,16 +476,27 @@ function useSettingsSave<K extends keyof SettingsData>(key: K) {
 export function StoreSettingsForm({ initial }: { initial: SettingsData['store'] }) {
   const [v, setV] = useState(initial);
   const { saving, errors, save } = useSettingsSave('store');
+  const text = (key: keyof SettingsData['store'], label: string, extra: { hint?: string; type?: string; className?: string; placeholder?: string } = {}) => (
+    <Field label={label} error={errors[key]} hint={extra.hint} className={extra.className}>
+      {(p) => <Input {...p} type={extra.type} placeholder={extra.placeholder} value={v[key]} onChange={(e) => setV({ ...v, [key]: e.target.value })} />}
+    </Field>
+  );
   return (
-    <Panel title="Store details">
+    <Panel title="Store & business details">
+      <p className="mb-4 text-[12.5px] text-muted">Enter your real, verified business details. They appear in the footer, order emails and the help page. Leave a field blank rather than guessing.</p>
       <div className="grid gap-4 md:grid-cols-2">
-        <Field label="Store name" error={errors.storeName}>{(p) => <Input {...p} value={v.storeName} onChange={(e) => setV({ ...v, storeName: e.target.value })} />}</Field>
-        <Field label="Tagline" error={errors.tagline}>{(p) => <Input {...p} value={v.tagline} onChange={(e) => setV({ ...v, tagline: e.target.value })} />}</Field>
-        <Field label="Support email" error={errors.supportEmail}>{(p) => <Input {...p} type="email" value={v.supportEmail} onChange={(e) => setV({ ...v, supportEmail: e.target.value })} />}</Field>
-        <Field label="Support phone" error={errors.supportPhone}>{(p) => <Input {...p} type="tel" value={v.supportPhone} onChange={(e) => setV({ ...v, supportPhone: e.target.value })} />}</Field>
-        <Field label="Address" error={errors.address} className="md:col-span-2">{(p) => <Input {...p} value={v.address} onChange={(e) => setV({ ...v, address: e.target.value })} />}</Field>
-        <Field label="Facebook URL" error={errors.facebookUrl}>{(p) => <Input {...p} value={v.facebookUrl} onChange={(e) => setV({ ...v, facebookUrl: e.target.value })} />}</Field>
-        <Field label="Instagram URL" error={errors.instagramUrl}>{(p) => <Input {...p} value={v.instagramUrl} onChange={(e) => setV({ ...v, instagramUrl: e.target.value })} />}</Field>
+        {text('storeName', 'Store name')}
+        {text('tagline', 'Tagline')}
+        {text('legalName', 'Registered business name', { hint: 'As on your trade licence.' })}
+        {text('tradeLicense', 'Trade licence number')}
+        {text('vatRegistration', 'VAT registration / BIN', { hint: 'Leave blank if not registered.' })}
+        {text('address', 'Business address')}
+        {text('supportEmail', 'Support email', { type: 'email' })}
+        {text('supportPhone', 'Support phone', { type: 'tel', placeholder: '01XXXXXXXXX' })}
+        {text('whatsappNumber', 'WhatsApp number', { type: 'tel', placeholder: '01XXXXXXXXX' })}
+        {text('supportHours', 'Support hours', { placeholder: 'e.g. Sat–Thu, 10am–7pm' })}
+        {text('facebookUrl', 'Facebook URL')}
+        {text('instagramUrl', 'Instagram URL')}
       </div>
       <Button caps={false} className="mt-5" onClick={() => save(v)} loading={saving}>
         Save
@@ -524,15 +566,32 @@ export function AnnouncementForm({ initial }: { initial: SettingsData['announcem
 export function PoliciesForm({ initial }: { initial: SettingsData['policies'] }) {
   const [v, setV] = useState(initial);
   const { saving, errors, save } = useSettingsSave('policies');
-  const labels: Record<keyof SettingsData['policies'], string> = { shipping: 'Delivery & charges', returns: 'Returns & exchanges', privacy: 'Privacy policy', terms: 'Terms of service' };
+  const labels: Record<'shipping' | 'returns' | 'privacy' | 'terms', string> = {
+    shipping: 'Delivery & charges',
+    returns: 'Returns & exchanges',
+    privacy: 'Privacy policy',
+    terms: 'Terms of service',
+  };
   return (
     <Panel title="Policies">
-      <p className="mb-4 text-[12.5px] text-muted">Plain text. Start a line with “## ” for a heading and “- ” for a bullet. Templates — have them reviewed before launch.</p>
+      <Alert tone="warning" className="mb-4">
+        These are starting TEMPLATES, not legal advice. Have them reviewed for your business (delivery promises, refund timelines, data handling) and tick
+        “Reviewed” only then — until a policy is marked reviewed, the storefront shows it as a draft.
+      </Alert>
+      <p className="mb-4 text-[12.5px] text-muted">Plain text. Start a line with “## ” for a heading and “- ” for a bullet.</p>
       <div className="grid gap-5 lg:grid-cols-2">
-        {(Object.keys(labels) as (keyof SettingsData['policies'])[]).map((k) => (
-          <Field key={k} label={labels[k]} error={errors[k]}>
-            {(p) => <Textarea {...p} rows={10} className="font-mono text-[12.5px]" value={v[k]} onChange={(e) => setV({ ...v, [k]: e.target.value })} />}
-          </Field>
+        {(Object.keys(labels) as (keyof typeof labels)[]).map((k) => (
+          <div key={k}>
+            <Field label={labels[k]} error={errors[k]}>
+              {(p) => <Textarea {...p} rows={10} className="font-mono text-[12.5px]" value={v[k]} onChange={(e) => setV({ ...v, [k]: e.target.value })} />}
+            </Field>
+            <Checkbox
+              className="mt-2"
+              label="Reviewed and approved by the business"
+              checked={v.reviewed[k]}
+              onChange={(e) => setV({ ...v, reviewed: { ...v.reviewed, [k]: e.target.checked } })}
+            />
+          </div>
         ))}
       </div>
       <Button caps={false} className="mt-5" onClick={() => save(v)} loading={saving}>
@@ -542,18 +601,156 @@ export function PoliciesForm({ initial }: { initial: SettingsData['policies'] })
   );
 }
 
-export function DemoDataPanel({ summary }: { summary: { users: number; products: number; categories: number; collections: number; coupons: number; orders: number; total: number } }) {
+export function ReturnSettingsForm({ initial }: { initial: SettingsData['returns'] }) {
+  const [v, setV] = useState(initial);
+  const { saving, errors, save } = useSettingsSave('returns');
+  return (
+    <Panel title="Returns">
+      <div className="space-y-4">
+        <Checkbox
+          label="Customers can request returns online"
+          description="Shown on delivered orders inside the return window. You approve or decline every request."
+          checked={v.enabled}
+          onChange={(e) => setV({ ...v, enabled: e.target.checked })}
+        />
+        <Field label="Return window (days after delivery)" error={errors.windowDays} className="max-w-xs">
+          {(p) => <Input {...p} inputMode="numeric" value={String(v.windowDays)} onChange={(e) => setV({ ...v, windowDays: Number(e.target.value.replace(/\D/g, '')) || 0 })} />}
+        </Field>
+        <Field label="Instructions sent when a return is approved" error={errors.instructions} hint="Pickup arrangements, drop-off address, packing requirements.">
+          {(p) => <Textarea {...p} rows={4} value={v.instructions} onChange={(e) => setV({ ...v, instructions: e.target.value })} />}
+        </Field>
+      </div>
+      <Button caps={false} className="mt-5" onClick={() => save(v)} loading={saving}>
+        Save
+      </Button>
+    </Panel>
+  );
+}
+
+export function NotificationSettingsForm({
+  initial,
+  providers,
+  adminEmail,
+}: {
+  initial: SettingsData['notifications'];
+  providers: { email: boolean; sms: string | null };
+  adminEmail: string;
+}) {
+  const [v, setV] = useState(initial);
+  const { saving, errors, save } = useSettingsSave('notifications');
+  const [testTo, setTestTo] = useState({ email: adminEmail, sms: '' });
+  const [testing, setTesting] = useState<'email' | 'sms' | null>(null);
+  const toggle = (key: keyof SettingsData['notifications'], label: string, description?: string, disabled?: boolean) => (
+    <Checkbox label={label} description={description} disabled={disabled} checked={Boolean(v[key])} onChange={(e) => setV({ ...v, [key]: e.target.checked })} />
+  );
+  const sendTest = async (channel: 'email' | 'sms') => {
+    setTesting(channel);
+    const result = await api<{ status: 'sent' | 'failed' | 'skipped'; error: string | null }>('/api/v1/admin/notifications/test', {
+      body: { channel, to: testTo[channel] },
+    });
+    setTesting(null);
+    if (!result.ok) return toast.error(result.error.message);
+    if (result.data.status === 'sent') toast(`Test ${channel === 'email' ? 'email' : 'SMS'} accepted by the provider. Check that it arrived.`);
+    else toast.error(result.data.error ?? 'Not sent.');
+  };
+  return (
+    <Panel title="Notifications">
+      <div className="grid gap-4 md:grid-cols-2">
+        <Alert tone={providers.email ? 'success' : 'warning'}>
+          {providers.email ? 'Email provider configured (SMTP).' : 'Email is NOT configured — set SMTP_HOST, SMTP_FROM and credentials on the server. Until then, emails are recorded as “not sent”.'}
+        </Alert>
+        <Alert tone={providers.sms ? 'success' : 'info'}>
+          {providers.sms ? `SMS provider configured (${providers.sms}).` : 'SMS is optional and currently off (SMS_PROVIDER not set).'}
+        </Alert>
+      </div>
+      <div className="mt-5 grid gap-6 md:grid-cols-2">
+        <div className="space-y-3 border border-line p-4">
+          <p className="text-[12px] uppercase tracking-[0.12em] text-muted">Customers</p>
+          {toggle('emailWelcome', 'Welcome email on registration')}
+          {toggle('emailOrderUpdates', 'Order emails', 'Confirmation, payment received, shipped (with tracking), delivered, cancelled.')}
+          {toggle('emailReturnUpdates', 'Return updates by email')}
+          {toggle('smsOrderUpdates', 'Order SMS', 'Confirmation, confirmed, shipped, delivered, cancelled.', !providers.sms)}
+        </div>
+        <div className="space-y-3 border border-line p-4">
+          <p className="text-[12px] uppercase tracking-[0.12em] text-muted">Staff alerts</p>
+          <Field label="Send staff alerts to" error={errors.staffEmail} hint="Blank = no staff alerts.">
+            {(p) => <Input {...p} type="email" value={v.staffEmail} onChange={(e) => setV({ ...v, staffEmail: e.target.value })} placeholder="orders@yourdomain.com" />}
+          </Field>
+          {toggle('staffNewOrder', 'New orders (COD placed / online paid)')}
+          {toggle('staffNewReturn', 'New return requests')}
+          {toggle('staffNewSupport', 'New support messages')}
+        </div>
+      </div>
+      <Button caps={false} className="mt-5" onClick={() => save(v)} loading={saving}>
+        Save
+      </Button>
+      <div className="mt-6 grid gap-4 border-t border-line pt-5 md:grid-cols-2">
+        <div className="flex items-end gap-2">
+          <Field label="Send a test email to" className="flex-1">
+            {(p) => <Input {...p} type="email" value={testTo.email} onChange={(e) => setTestTo({ ...testTo, email: e.target.value })} />}
+          </Field>
+          <Button caps={false} variant="outline" onClick={() => sendTest('email')} loading={testing === 'email'} disabled={!providers.email}>
+            Send test
+          </Button>
+        </div>
+        <div className="flex items-end gap-2">
+          <Field label="Send a test SMS to" className="flex-1">
+            {(p) => <Input {...p} type="tel" placeholder="01XXXXXXXXX" value={testTo.sms} onChange={(e) => setTestTo({ ...testTo, sms: e.target.value })} />}
+          </Field>
+          <Button caps={false} variant="outline" onClick={() => sendTest('sms')} loading={testing === 'sms'} disabled={!providers.sms}>
+            Send test
+          </Button>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+export function SupportSettingsForm({ initial }: { initial: SettingsData['support'] }) {
+  const [v, setV] = useState(initial);
+  const { saving, errors, save } = useSettingsSave('support');
+  return (
+    <Panel title="Help & contact page">
+      <div className="space-y-4">
+        <Checkbox label="Show the contact form" description="Messages arrive in Support inbox." checked={v.contactFormEnabled} onChange={(e) => setV({ ...v, contactFormEnabled: e.target.checked })} />
+        <Field label="Typical response time" error={errors.responseTime} hint="Completes the sentence “We reply …”, e.g. “within one working day”." className="max-w-md">
+          {(p) => <Input {...p} value={v.responseTime} onChange={(e) => setV({ ...v, responseTime: e.target.value })} />}
+        </Field>
+        <Field label="FAQ" error={errors.faq} hint="“## ” starts a question; the paragraph below is the answer.">
+          {(p) => <Textarea {...p} rows={10} className="font-mono text-[12.5px]" value={v.faq} onChange={(e) => setV({ ...v, faq: e.target.value })} />}
+        </Field>
+      </div>
+      <Button caps={false} className="mt-5" onClick={() => save(v)} loading={saving}>
+        Save
+      </Button>
+    </Panel>
+  );
+}
+
+export function DemoDataPanel({
+  summary,
+}: {
+  summary: { users: number; products: number; categories: number; collections: number; coupons: number; orders: number; supportRequests: number; total: number };
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState('');
   const [busy, setBusy] = useState(false);
   const purge = async () => {
     setBusy(true);
-    const result = await api<Record<string, number>>('/api/v1/admin/demo-data', { method: 'DELETE' });
+    const result = await api<{
+      products: number;
+      orders: number;
+      users: number;
+      kept: { products: string[]; coupons: string[]; collections: string[]; categories: string[]; users: string[] };
+    }>('/api/v1/admin/demo-data', { method: 'DELETE' });
     setBusy(false);
     setOpen(false);
     if (!result.ok) return toast.error(result.error.message);
-    toast(`Demo data removed: ${result.data.products} products, ${result.data.orders} orders, ${result.data.users} accounts.`);
+    const kept = Object.values(result.data.kept).reduce((n, list) => n + list.length, 0);
+    toast(`Demo data removed: ${result.data.products} products, ${result.data.orders} orders, ${result.data.users} accounts.`, {
+      description: kept ? `${kept} record(s) were kept because real orders or products depend on them (archived/disabled).` : undefined,
+    });
     router.refresh();
   };
   return (
@@ -574,7 +771,8 @@ export function DemoDataPanel({ summary }: { summary: { users: number; products:
             <li>{summary.coupons} coupons</li>
           </ul>
           <Alert tone="warning" className="mt-4">
-            Remove all demo data before launch. Your own products, orders and accounts are not touched; your current admin account is kept.
+            Remove all demo data before launch. Real orders, products and accounts are never deleted: demo items that real orders depend on are kept
+            (archived or disabled). Sign in with your own administrator account first — demo accounts are removed.
           </Alert>
           <Button caps={false} variant="danger-outline" className="mt-4" onClick={() => setOpen(true)}>
             Remove demo data…

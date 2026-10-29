@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { PAYMENT_METHODS } from '@/lib/order-status';
+import { RETURN_REASONS } from '@/lib/returns';
 import {
   addressFieldsSchema,
   emailSchema,
@@ -44,6 +45,15 @@ export const changePasswordSchema = z
     message: 'Choose a password different from the current one.',
   });
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+
+export const forgotPasswordSchema = z.object({ email: emailSchema });
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+
+export const resetPasswordSchema = z.object({
+  token: z.string({ error: 'This reset link is invalid.' }).trim().min(20, 'This reset link is invalid.').max(200, 'This reset link is invalid.'),
+  password: passwordSchema,
+});
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 
 export const addressSchema = addressFieldsSchema
   .extend({
@@ -120,6 +130,56 @@ export const trackOrderSchema = z.object({
     .max(32),
   phone: phoneSchema,
 });
+
+// ─── Returns ──────────────────────────────────────────────────────────────────
+
+export const returnRequestSchema = z.object({
+  items: z
+    .array(z.object({ orderItemId: uuidSchema, quantity: z.number().int().min(1).max(50) }), { error: 'Choose at least one item.' })
+    .min(1, 'Choose at least one item to return.')
+    .max(50),
+  reason: z.enum(RETURN_REASONS, { error: 'Tell us why you are returning the items.' }),
+  note: z.string().trim().max(1000, 'Keep the note under 1,000 characters.').optional().transform((v) => v || null),
+  /** Guest access token (order link) when not signed in. */
+  token: z.string().max(200).optional(),
+});
+export type ReturnRequestInput = z.infer<typeof returnRequestSchema>;
+
+// ─── Customer support ─────────────────────────────────────────────────────────
+
+export const SUPPORT_TOPICS = ['order', 'delivery', 'return', 'payment', 'product', 'other'] as const;
+export type SupportTopic = (typeof SUPPORT_TOPICS)[number];
+export const SUPPORT_TOPIC_LABEL: Record<SupportTopic, string> = {
+  order: 'An existing order',
+  delivery: 'Delivery',
+  return: 'Returns & exchanges',
+  payment: 'Payment or refund',
+  product: 'Product, size or stock question',
+  other: 'Something else',
+};
+
+export const supportRequestSchema = z
+  .object({
+    name: personNameSchema,
+    email: optionalEmailSchema,
+    phone: optionalPhoneSchema,
+    orderNumber: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .max(32)
+      .optional()
+      .transform((v) => v || null)
+      .refine((v) => v === null || /^[A-Z0-9-]{6,32}$/.test(v), 'Check the order number.'),
+    topic: z.enum(SUPPORT_TOPICS, { error: 'Choose a topic.' }),
+    message: z.string({ error: 'Write your message.' }).trim().min(10, 'Please add a little more detail (10+ characters).').max(4000, 'Keep the message under 4,000 characters.'),
+    /** Honeypot: real visitors never see or fill this field. */
+    website: z.string().max(200).optional(),
+  })
+  .superRefine((v, ctx) => {
+    if (!v.email && !v.phone) ctx.addIssue({ code: 'custom', path: ['email'], message: 'Give us an email or phone number so we can reply.' });
+  });
+export type SupportRequestInput = z.infer<typeof supportRequestSchema>;
 
 // ─── Catalogue query (URL search params) ──────────────────────────────────────
 

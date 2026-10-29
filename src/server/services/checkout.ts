@@ -19,7 +19,10 @@ import {
 import { appUrl, paymentTimeoutMinutes, sslcommerzConfig } from '@/server/env';
 import { AppError, badRequest, conflict, isUniqueViolation, unauthorized, validationError } from '@/server/errors';
 import { randomCode, sha256Hex } from '@/server/auth/tokens';
-import { initiateSession } from '@/server/payments/sslcommerz';
+import { log } from '@/server/logger';
+import { scheduleNotificationDispatch } from '@/server/notifications';
+import { queueOrderPlacedNotifications } from '@/server/notifications/orders';
+import { initiateSession, SSLC_MAX_AMOUNT, SSLC_MIN_AMOUNT } from '@/server/payments/sslcommerz';
 import { formatBDT } from '@/lib/money';
 import type { PaymentMethod } from '@/lib/order-status';
 import type { CheckoutInput, QuoteInput } from '@/lib/validation/store';
@@ -53,6 +56,7 @@ export type CheckoutQuote = {
 export async function getAvailablePaymentMethods(total: number) {
   const settings = await getSetting('checkout');
   const online = settings.onlinePaymentEnabled && sslcommerzConfig() !== null;
+  const onlineOutOfRange = total < SSLC_MIN_AMOUNT || total > SSLC_MAX_AMOUNT;
   const codOverLimit = settings.codMaxOrderAmount !== null && total > settings.codMaxOrderAmount;
   return [
     {
@@ -66,8 +70,12 @@ export async function getAvailablePaymentMethods(total: number) {
     },
     {
       method: 'sslcommerz' as const,
-      available: online,
-      reason: online ? null : 'Online payment is not available at the moment.',
+      available: online && !onlineOutOfRange,
+      reason: !online
+        ? 'Online payment is not available at the moment.'
+        : onlineOutOfRange
+          ? `Online payment is available for orders from ${formatBDT(SSLC_MIN_AMOUNT)} to ${formatBDT(SSLC_MAX_AMOUNT)}.`
+          : null,
     },
   ];
 }
@@ -315,6 +323,12 @@ export async function placeOrder(input: CheckoutInput, ctx: PlaceOrderContext): 
           'COD_LIMIT_EXCEEDED',
         );
       }
+      if (input.paymentMethod === 'sslcommerz' && (total < SSLC_MIN_AMOUNT || total > SSLC_MAX_AMOUNT)) {
+        throw badRequest(
+          `Online payment is available for orders from ${formatBDT(SSLC_MIN_AMOUNT)} to ${formatBDT(SSLC_MAX_AMOUNT)}. Please choose another payment method.`,
+          'AMOUNT_OUT_OF_RANGE',
+        );
+      }
 
       const images = await tx
         .select({ productId: productImages.productId, url: productImages.url, colorId: productImages.colorId })
@@ -429,6 +443,7 @@ export async function placeOrder(input: CheckoutInput, ctx: PlaceOrderContext): 
       });
 
       await tx.delete(cartItems).where(eq(cartItems.cartId, cartId));
+      if (!isOnline) await queueOrderPlacedNotifications(tx, order!);
 
       if (input.saveAddress && ctx.userId) {
         const [{ count }] = await tx
@@ -486,7 +501,10 @@ export async function placeOrder(input: CheckoutInput, ctx: PlaceOrderContext): 
     accessToken,
     reused: false,
   };
-  if (!created.txn || !gateway) return { ...base, next: { type: 'confirmation' } };
+  if (!created.txn || !gateway) {
+    scheduleNotificationDispatch();
+    return { ...base, next: { type: 'confirmation' } };
+  }
 
   try {
     const session = await initiateSession(gateway, {
@@ -513,7 +531,7 @@ export async function placeOrder(input: CheckoutInput, ctx: PlaceOrderContext): 
       .where(eq(paymentTransactions.id, created.txn.id));
     return { ...base, next: { type: 'redirect', url: session.gatewayUrl } };
   } catch (error) {
-    console.error('[checkout] payment session failed', error);
+    log.error('checkout.payment_session_failed', { orderNumber, error: error instanceof Error ? error.message : String(error) });
     await failPaymentInitiation(created.txn.id, created.order.id, 'Could not start the payment session.', {
       error: String(error instanceof Error ? error.message : error),
     });

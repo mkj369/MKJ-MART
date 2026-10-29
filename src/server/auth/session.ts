@@ -2,7 +2,7 @@ import 'server-only';
 import { and, eq, gt, lt, ne } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { sessions, users } from '@/server/db/schema';
-import { cookieSecure } from '@/server/env';
+import { cookieSecure, demoLoginAllowed } from '@/server/env';
 import type { Role } from '@/lib/permissions';
 import { generateToken, sha256Hex } from './tokens';
 
@@ -70,6 +70,7 @@ export async function validateSessionToken(
       phone: users.phone,
       role: users.role,
       status: users.status,
+      isDemo: users.isDemo,
     })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))
@@ -77,7 +78,7 @@ export async function validateSessionToken(
     .limit(1);
 
   if (!row) return null;
-  if (row.status !== 'active') {
+  if (row.status !== 'active' || (row.isDemo && !demoLoginAllowed())) {
     await db.delete(sessions).where(eq(sessions.id, sessionId));
     return null;
   }

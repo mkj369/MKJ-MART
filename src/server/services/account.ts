@@ -1,4 +1,5 @@
 import 'server-only';
+import { enqueueNotification, scheduleNotificationDispatch } from '@/server/notifications';
 import { and, asc, desc, eq, ne, sql } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { addresses, users } from '@/server/db/schema';
@@ -31,13 +32,22 @@ export async function updateProfile(userId: string, input: ProfileInput) {
 /** Verifies the current password, stores the new hash and signs out every OTHER session. */
 export async function changePassword(userId: string, currentSessionId: string, input: ChangePasswordInput) {
   await enforceRateLimit(`password-change:${userId}`, 10, 15 * 60);
-  const [user] = await db.select({ passwordHash: users.passwordHash }).from(users).where(eq(users.id, userId)).limit(1);
+  const [user] = await db
+    .select({ passwordHash: users.passwordHash, email: users.email, name: users.name })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
   if (!user) throw notFound('Account not found.');
   if (!(await verifyPassword(input.currentPassword, user.passwordHash))) {
     throw validationError({ currentPassword: 'Your current password is incorrect.' });
   }
-  await db.update(users).set({ passwordHash: await hashPassword(input.newPassword) }).where(eq(users.id, userId));
+  const passwordHash = await hashPassword(input.newPassword);
+  await db.transaction(async (tx) => {
+    await tx.update(users).set({ passwordHash }).where(eq(users.id, userId));
+    await enqueueNotification(tx, { template: 'password_changed', recipient: user.email, data: { name: user.name }, userId });
+  });
   await invalidateUserSessions(userId, currentSessionId);
+  scheduleNotificationDispatch();
 }
 
 // ─── Address book ─────────────────────────────────────────────────────────────

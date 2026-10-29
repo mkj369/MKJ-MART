@@ -21,6 +21,7 @@ type TrackResult = {
   phoneMasked: string;
   courierName: string | null;
   trackingNumber: string | null;
+  trackingUrl: string | null;
   itemCount: number;
   events: { id: string; message: string; createdAt: string }[];
 };
@@ -86,6 +87,14 @@ export function TrackOrderForm({ initialOrderNumber }: { initialOrderNumber: str
               <p className="mt-1 text-[14px]">
                 {result.courierName}
                 {result.trackingNumber ? ` · Tracking no. ${result.trackingNumber}` : ''}
+                {result.trackingUrl ? (
+                  <>
+                    {' · '}
+                    <a href={result.trackingUrl} target="_blank" rel="noopener noreferrer" className="underline underline-offset-4">
+                      Track parcel
+                    </a>
+                  </>
+                ) : null}
               </p>
             ) : null}
           </div>

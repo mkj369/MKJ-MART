@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { CheckCircle2 } from 'lucide-react';
 import { Alert, Badge, EmptyState } from '@/components/ui/feedback';
 import { buttonClasses } from '@/components/ui/button';
-import { OrderActions } from '@/components/store/order-actions';
+import { OrderActions, ReturnsPanel } from '@/components/store/order-actions';
 import { OrderEvents, OrderProgress } from '@/components/store/order-timeline';
 import { getCurrentUser } from '@/server/auth/current-user';
 import { getOrderForViewer } from '@/server/services/orders';
@@ -12,6 +12,8 @@ import { formatBDT } from '@/lib/money';
 import { formatBdPhone } from '@/lib/phone';
 import { ORDER_STATUS_DESCRIPTION, ORDER_STATUS_LABEL, PAYMENT_METHOD_LABEL, PAYMENT_STATUS_LABEL } from '@/lib/order-status';
 import { formatDateTime } from '@/lib/utils';
+
+const timeFormat = new Intl.DateTimeFormat('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Dhaka' });
 
 export const metadata: Metadata = { title: 'Your order', robots: { index: false } };
 
@@ -71,17 +73,26 @@ export default async function OrderPage({ params, searchParams }: Props) {
         </div>
       ) : null}
 
-      {payment === 'failed' || payment === 'cancelled' ? (
-        <Alert tone="danger" className="mb-8" title={payment === 'cancelled' ? 'Payment cancelled' : 'Payment not completed'}>
-          Your online payment didn’t go through, so this order was cancelled and the items were released. No money was taken — if
-          your account was charged, it will be reversed by your bank or wallet provider. You can restore the items to your bag and try
-          again, or choose Cash on Delivery.
+      {(payment === 'failed' || payment === 'cancelled') && order.canRetryPayment ? (
+        <Alert tone="warning" className="mb-8" title={payment === 'cancelled' ? 'Payment cancelled' : 'Payment not completed'}>
+          Your online payment didn’t go through and no money was taken. Your items are reserved until{' '}
+          {order.paymentExpiresAt ? timeFormat.format(order.paymentExpiresAt) : 'shortly'} — use “Pay now” to try again, or cancel the order.
         </Alert>
       ) : null}
-      {payment === 'pending' ? (
+      {(payment === 'failed' || payment === 'cancelled') && !order.canRetryPayment && order.status === 'cancelled' ? (
+        <Alert tone="danger" className="mb-8" title={payment === 'cancelled' ? 'Payment cancelled' : 'Payment not completed'}>
+          Your online payment didn’t go through, so this order was cancelled and the items were released. If your account was charged,
+          contact us with your order number. You can restore the items to your bag and order again.
+        </Alert>
+      ) : null}
+      {payment === 'pending' && order.paymentStatus !== 'paid' ? (
         <Alert tone="warning" className="mb-8" title="Confirming your payment">
-          We are waiting for confirmation from the payment gateway. This page will show the result once it arrives — please don’t pay
-          twice.
+          We are waiting for confirmation from the payment gateway. Refresh this page in a minute — please don’t pay twice.
+        </Alert>
+      ) : null}
+      {!payment && order.canRetryPayment && order.paymentStatus !== 'pending' ? (
+        <Alert tone="warning" className="mb-8" title="Payment needed">
+          This order is waiting for online payment. Your items are reserved until {order.paymentExpiresAt ? timeFormat.format(order.paymentExpiresAt) : 'shortly'}.
         </Alert>
       ) : null}
 
@@ -109,6 +120,15 @@ export default async function OrderPage({ params, searchParams }: Props) {
           <p className="mt-1 text-[14px]">
             Courier: <span className="font-medium">{order.courierName}</span>
             {order.trackingNumber ? <> · Tracking no. <span className="font-medium">{order.trackingNumber}</span></> : null}
+            {order.trackingUrl ? (
+              <>
+                {' '}
+                ·{' '}
+                <a href={order.trackingUrl} target="_blank" rel="noopener noreferrer" className="underline underline-offset-4">
+                  Track parcel
+                </a>
+              </>
+            ) : null}
           </p>
         ) : null}
       </div>
@@ -167,6 +187,12 @@ export default async function OrderPage({ params, searchParams }: Props) {
                 <dt>Total</dt>
                 <dd className="tabular-nums">{formatBDT(order.total)}</dd>
               </div>
+              {order.refundedTotal > 0 ? (
+                <div className="flex justify-between text-[13.5px] text-muted">
+                  <dt>Refunded</dt>
+                  <dd className="tabular-nums">−{formatBDT(order.refundedTotal)}</dd>
+                </div>
+              ) : null}
             </dl>
             <p className="mt-4 text-[13px] text-muted">{PAYMENT_METHOD_LABEL[order.paymentMethod]}</p>
           </div>
@@ -188,8 +214,22 @@ export default async function OrderPage({ params, searchParams }: Props) {
             orderNumber={order.orderNumber}
             token={token}
             canCancel={order.canCancel}
-            canRestore={order.status === 'cancelled' && order.paymentMethod === 'sslcommerz'}
+            canRestore={order.status === 'cancelled' && order.paymentMethod === 'sslcommerz' && order.paymentStatus !== 'paid'}
+            canRetryPayment={order.canRetryPayment}
           />
+          <ReturnsPanel
+            orderNumber={order.orderNumber}
+            token={token}
+            items={order.items.map((i) => ({ id: i.id, productName: i.productName, variantLabel: i.variantLabel, quantity: i.quantity }))}
+            returns={order.returns}
+            eligibility={order.returnEligibility}
+          />
+          <p className="text-[13px] text-muted">
+            Questions about this order?{' '}
+            <Link href={`/support?order=${encodeURIComponent(order.orderNumber)}`} className="text-ink underline underline-offset-4">
+              Contact us
+            </Link>
+          </p>
         </aside>
       </div>
     </div>

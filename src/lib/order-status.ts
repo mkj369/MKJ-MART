@@ -14,7 +14,7 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number];
 export const PAYMENT_METHODS = ['cod', 'sslcommerz'] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
-export const PAYMENT_STATUSES = ['unpaid', 'pending', 'paid', 'failed', 'cancelled', 'refunded'] as const;
+export const PAYMENT_STATUSES = ['unpaid', 'pending', 'paid', 'failed', 'cancelled', 'refunded', 'partially_refunded'] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
@@ -49,6 +49,7 @@ export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
   failed: 'Payment failed',
   cancelled: 'Payment cancelled',
   refunded: 'Refunded',
+  partially_refunded: 'Partly refunded',
 };
 
 /** The happy-path fulfilment steps rendered as a progress timeline. */

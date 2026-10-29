@@ -52,6 +52,7 @@ export const paymentStatusEnum = pgEnum('payment_status', [
   'failed',
   'cancelled',
   'refunded',
+  'partially_refunded',
 ]);
 export const paymentTxnStatusEnum = pgEnum('payment_txn_status', [
   'initiated',
@@ -71,6 +72,18 @@ export const stockReasonEnum = pgEnum('stock_reason', [
   'return',
   'correction',
 ]);
+export const userTokenPurposeEnum = pgEnum('user_token_purpose', ['password_reset']);
+export const notificationChannelEnum = pgEnum('notification_channel', ['email', 'sms']);
+export const notificationStatusEnum = pgEnum('notification_status', ['pending', 'sent', 'failed', 'skipped']);
+export const returnStatusEnum = pgEnum('return_status', [
+  'requested',
+  'approved',
+  'rejected',
+  'received',
+  'refunded',
+  'cancelled',
+]);
+export const supportStatusEnum = pgEnum('support_status', ['open', 'in_progress', 'resolved']);
 
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
 const updatedAt = () =>
@@ -454,6 +467,9 @@ export const orders = pgTable(
     adminNote: text('admin_note'),
     courierName: varchar('courier_name', { length: 80 }),
     trackingNumber: varchar('tracking_number', { length: 80 }),
+    trackingUrl: varchar('tracking_url', { length: 300 }),
+    // Sum of recorded refunds (poisha). Refunds are made outside the platform and recorded here.
+    refundedTotal: integer('refunded_total').notNull().default(0),
     // Safety
     idempotencyKey: varchar('idempotency_key', { length: 80 }),
     accessTokenHash: varchar('access_token_hash', { length: 64 }),
@@ -481,6 +497,7 @@ export const orders = pgTable(
       'orders_totals_consistent',
       sql`${t.total} = ${t.subtotal} - ${t.discountTotal} + ${t.shippingFee} AND ${t.total} >= 0`,
     ),
+    check('orders_refunded_total_range', sql`${t.refundedTotal} >= 0 AND ${t.refundedTotal} <= ${t.total}`),
   ],
 );
 
@@ -603,6 +620,180 @@ export const domainEvents = pgTable(
   },
   (t) => [index('domain_events_pending_idx').on(t.dispatchedAt, t.createdAt)],
 );
+
+// ─── Account security ───────────────────────────────────────────────────────────────────────
+
+/**
+ * Single-use, expiring tokens (password reset). Only the SHA-256 of the token is stored, so a
+ * database leak exposes no usable links.
+ */
+export const userTokens = pgTable(
+  'user_tokens',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    purpose: userTokenPurposeEnum('purpose').notNull(),
+    tokenHash: varchar('token_hash', { length: 64 }).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    requestIp: varchar('request_ip', { length: 64 }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('user_tokens_hash_key').on(t.tokenHash), index('user_tokens_user_idx').on(t.userId, t.purpose)],
+);
+
+// ─── Notifications ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Outbox of customer/staff notifications (email, SMS). Rows are written in the same transaction
+ * as the change they describe and delivered by a dispatcher with retries. `status` reflects what
+ * the provider actually reported: messages are only `sent` after the SMTP server / SMS gateway
+ * accepted them; `skipped` means no provider is configured (or the record is demo data).
+ */
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    channel: notificationChannelEnum('channel').notNull(),
+    template: varchar('template', { length: 60 }).notNull(),
+    recipient: varchar('recipient', { length: 255 }).notNull(),
+    subject: varchar('subject', { length: 255 }),
+    payload: jsonb('payload').notNull().default(sql`'{}'::jsonb`),
+    /** Sensitive render data (e.g. a guest order link). Erased once the message reaches a final state. */
+    secretPayload: jsonb('secret_payload'),
+    status: notificationStatusEnum('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    lastError: text('last_error'),
+    providerMessageId: varchar('provider_message_id', { length: 255 }),
+    orderId: uuid('order_id').references(() => orders.id, { onDelete: 'set null' }),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }).notNull().defaultNow(),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index('notifications_pending_idx').on(t.status, t.nextAttemptAt),
+    index('notifications_order_idx').on(t.orderId, t.createdAt),
+  ],
+);
+
+// ─── Returns & refunds ──────────────────────────────────────────────────────────────────────
+
+export const returnRequests = pgTable(
+  'return_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    requestNumber: varchar('request_number', { length: 32 }).notNull(),
+    orderId: uuid('order_id')
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    status: returnStatusEnum('status').notNull().default('requested'),
+    reason: varchar('reason', { length: 40 }).notNull(),
+    customerNote: text('customer_note'),
+    /** Shown to the customer (e.g. why a request was declined, drop-off instructions). */
+    resolutionNote: text('resolution_note'),
+    /** Internal only. */
+    adminNote: text('admin_note'),
+    restocked: boolean('restocked').notNull().default(false),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+    receivedAt: timestamp('received_at', { withTimezone: true }),
+    refundedAt: timestamp('refunded_at', { withTimezone: true }),
+    isDemo: boolean('is_demo').notNull().default(false),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex('return_requests_number_key').on(t.requestNumber),
+    index('return_requests_order_idx').on(t.orderId),
+    index('return_requests_status_idx').on(t.status, t.createdAt),
+  ],
+);
+
+export const returnRequestItems = pgTable(
+  'return_request_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    returnRequestId: uuid('return_request_id')
+      .notNull()
+      .references(() => returnRequests.id, { onDelete: 'cascade' }),
+    orderItemId: uuid('order_item_id')
+      .notNull()
+      .references(() => orderItems.id, { onDelete: 'cascade' }),
+    quantity: integer('quantity').notNull(),
+  },
+  (t) => [
+    uniqueIndex('return_request_items_key').on(t.returnRequestId, t.orderItemId),
+    check('return_request_items_quantity_positive', sql`${t.quantity} > 0`),
+  ],
+);
+
+/**
+ * Refund ledger. MKJ MART does not move money: refunds are paid through the SSLCommerz merchant
+ * panel, bKash/Nagad, bank transfer or cash, and then RECORDED here with the external reference.
+ */
+export const refunds = pgTable(
+  'refunds',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orderId: uuid('order_id')
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    returnRequestId: uuid('return_request_id').references(() => returnRequests.id, { onDelete: 'set null' }),
+    amount: integer('amount').notNull(),
+    method: varchar('method', { length: 30 }).notNull(),
+    reference: varchar('reference', { length: 120 }),
+    note: text('note'),
+    actorId: uuid('actor_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('refunds_order_idx').on(t.orderId), check('refunds_amount_positive', sql`${t.amount} > 0`)],
+);
+
+// ─── Customer support ───────────────────────────────────────────────────────────────────────
+
+export const supportRequests = pgTable(
+  'support_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ticketNumber: varchar('ticket_number', { length: 32 }).notNull(),
+    name: varchar('name', { length: 120 }).notNull(),
+    email: varchar('email', { length: 255 }),
+    phone: varchar('phone', { length: 20 }),
+    orderNumber: varchar('order_number', { length: 32 }),
+    topic: varchar('topic', { length: 40 }).notNull(),
+    message: text('message').notNull(),
+    status: supportStatusEnum('status').notNull().default('open'),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    adminNote: text('admin_note'),
+    ipAddress: varchar('ip_address', { length: 64 }),
+    isDemo: boolean('is_demo').notNull().default(false),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex('support_requests_ticket_key').on(t.ticketNumber),
+    index('support_requests_status_idx').on(t.status, t.createdAt),
+    check('support_requests_contact', sql`${t.email} IS NOT NULL OR ${t.phone} IS NOT NULL`),
+  ],
+);
+
+// ─── Operations ─────────────────────────────────────────────────────────────────────────────
+
+/** Heartbeat of scheduled jobs, so the admin can see whether cron is actually running. */
+export const jobRuns = pgTable('job_runs', {
+  name: varchar('name', { length: 60 }).primaryKey(),
+  lastStartedAt: timestamp('last_started_at', { withTimezone: true }),
+  lastSucceededAt: timestamp('last_succeeded_at', { withTimezone: true }),
+  lastFailedAt: timestamp('last_failed_at', { withTimezone: true }),
+  lastError: text('last_error'),
+  lastResult: jsonb('last_result'),
+  runCount: integer('run_count').notNull().default(0),
+});
 
 // ─── Relations (for relational queries) ─────────────────────────────────────────────────────
 

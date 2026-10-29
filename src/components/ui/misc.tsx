@@ -115,16 +115,17 @@ export function Breadcrumbs({ items, className }: { items: { label: string; href
 }
 
 /** Renders admin-authored policy text safely (no HTML): "## " headings, "- " bullets, paragraphs. */
-export function RichText({ text, className }: { text: string; className?: string }) {
+export function RichText({ text, className, headingAs = 'h2' }: { text: string; className?: string; headingAs?: 'h2' | 'h3' }) {
   const blocks = text.split(/\n{2,}/).map((b) => b.trim()).filter(Boolean);
+  const Heading = headingAs;
   return (
     <div className={cn('space-y-4 text-[15px] leading-[1.75] text-ink/85', className)}>
       {blocks.map((block, i) => {
         if (block.startsWith('## ')) {
           return (
-            <h2 key={i} className="pt-4 font-display text-[26px] font-medium text-ink first:pt-0">
+            <Heading key={i} className="pt-4 font-display text-[26px] font-medium text-ink first:pt-0">
               {block.slice(3)}
-            </h2>
+            </Heading>
           );
         }
         const lines = block.split('\n');

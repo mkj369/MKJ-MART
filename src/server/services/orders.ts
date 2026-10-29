@@ -1,5 +1,5 @@
 import 'server-only';
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual } from 'node:crypto';
 import { and, asc, count, desc, eq, sql } from 'drizzle-orm';
 import { db, type DbOrTx, type Transaction } from '@/server/db';
 import {
@@ -11,25 +11,25 @@ import {
   paymentTransactions,
   products,
   productVariants,
+  returnRequestItems,
+  returnRequests,
   stockMovements,
 } from '@/server/db/schema';
 import { conflict, notFound } from '@/server/errors';
 import { sha256Hex } from '@/server/auth/tokens';
 import { maskPhone } from '@/lib/phone';
 import type { OrderStatus, PaymentStatus } from '@/lib/order-status';
+import { computeReturnEligibility, type ReturnEligibility, type ReturnReason, type ReturnStatus } from '@/lib/returns';
+import { sslcommerzConfig } from '@/server/env';
+import { scheduleNotificationDispatch } from '@/server/notifications';
+import { queueOrderCancelledNotifications } from '@/server/notifications/orders';
+import { getSetting } from './settings';
 import { addLinesToCart } from './cart';
 import { recordEvent } from './events';
 
 export type OrderRow = typeof orders.$inferSelect;
 
-/**
- * Guest order access token, derived from the client's idempotency key (known only to the browser
- * that placed the order). Deterministic, so duplicate submissions and payment callbacks can
- * re-issue the same link without storing the token itself.
- */
-export function deriveOrderAccessToken(idempotencyKey: string, orderNumber: string): string {
-  return createHmac('sha256', idempotencyKey).update(`order-access:${orderNumber}`).digest('base64url');
-}
+export { deriveOrderAccessToken } from './order-token';
 
 function tokenMatches(token: string | null | undefined, hash: string | null): boolean {
   if (!token || !hash || token.length > 200) return false;
@@ -173,9 +173,12 @@ export type OrderDetail = {
   customerNote: string | null;
   courierName: string | null;
   trackingNumber: string | null;
+  trackingUrl: string | null;
   placedAt: Date;
   paidAt: Date | null;
+  deliveredAt: Date | null;
   paymentExpiresAt: Date | null;
+  refundedTotal: number;
   isDemo: boolean;
   items: {
     id: string;
@@ -190,9 +193,29 @@ export type OrderDetail = {
   }[];
   events: { id: string; status: OrderStatus | null; message: string; createdAt: Date }[];
   canCancel: boolean;
+  /** Online payment failed/abandoned but the reservation window is still open. */
+  canRetryPayment: boolean;
+  returns: OrderReturnSummary[];
+  returnEligibility: ReturnEligibility | null;
 };
 
-function toDetail(order: OrderRow, items: (typeof orderItems.$inferSelect)[], events: (typeof orderEvents.$inferSelect)[]): OrderDetail {
+export type OrderReturnSummary = {
+  id: string;
+  requestNumber: string;
+  status: ReturnStatus;
+  reason: ReturnReason;
+  resolutionNote: string | null;
+  createdAt: Date;
+  items: { orderItemId: string; quantity: number }[];
+};
+
+function toDetail(
+  order: OrderRow,
+  items: (typeof orderItems.$inferSelect)[],
+  events: (typeof orderEvents.$inferSelect)[],
+  returns: OrderReturnSummary[] = [],
+  returnEligibility: ReturnEligibility | null = null,
+): OrderDetail {
   return {
     id: order.id,
     orderNumber: order.orderNumber,
@@ -218,9 +241,12 @@ function toDetail(order: OrderRow, items: (typeof orderItems.$inferSelect)[], ev
     customerNote: order.customerNote,
     courierName: order.courierName,
     trackingNumber: order.trackingNumber,
+    trackingUrl: order.trackingUrl,
     placedAt: order.placedAt,
     paidAt: order.paidAt,
+    deliveredAt: order.deliveredAt,
     paymentExpiresAt: order.paymentExpiresAt,
+    refundedTotal: order.refundedTotal,
     isDemo: order.isDemo,
     items: items.map((i) => ({
       id: i.id,
@@ -237,17 +263,41 @@ function toDetail(order: OrderRow, items: (typeof orderItems.$inferSelect)[], ev
       .filter((e) => e.visibleToCustomer)
       .map((e) => ({ id: e.id, status: e.status, message: e.message, createdAt: e.createdAt })),
     canCancel: order.status === 'pending' && order.paymentStatus !== 'paid',
+    canRetryPayment:
+      !!sslcommerzConfig() &&
+      order.paymentMethod === 'sslcommerz' &&
+      order.status === 'pending' &&
+      order.paymentStatus !== 'paid' &&
+      !!order.paymentExpiresAt &&
+      order.paymentExpiresAt.getTime() > Date.now(),
+    returns,
+    returnEligibility,
   };
 }
 
 async function loadOrderWithRelations(where: ReturnType<typeof eq>) {
   const [order] = await db.select().from(orders).where(where).limit(1);
   if (!order) return null;
-  const [items, events] = await Promise.all([
+  const [items, events, returnRows, returnItemRows] = await Promise.all([
     db.select().from(orderItems).where(eq(orderItems.orderId, order.id)).orderBy(asc(orderItems.productName)),
     db.select().from(orderEvents).where(eq(orderEvents.orderId, order.id)).orderBy(asc(orderEvents.createdAt)),
+    db.select().from(returnRequests).where(eq(returnRequests.orderId, order.id)).orderBy(asc(returnRequests.createdAt)),
+    db
+      .select({ returnRequestId: returnRequestItems.returnRequestId, orderItemId: returnRequestItems.orderItemId, quantity: returnRequestItems.quantity })
+      .from(returnRequestItems)
+      .innerJoin(returnRequests, eq(returnRequests.id, returnRequestItems.returnRequestId))
+      .where(eq(returnRequests.orderId, order.id)),
   ]);
-  return { order, items, events };
+  const returns: OrderReturnSummary[] = returnRows.map((r) => ({
+    id: r.id,
+    requestNumber: r.requestNumber,
+    status: r.status,
+    reason: r.reason as ReturnReason,
+    resolutionNote: r.resolutionNote,
+    createdAt: r.createdAt,
+    items: returnItemRows.filter((i) => i.returnRequestId === r.id).map((i) => ({ orderItemId: i.orderItemId, quantity: i.quantity })),
+  }));
+  return { order, items, events, returns };
 }
 
 /** Owner (signed-in) or holder of the order's access token may view an order. */
@@ -261,7 +311,15 @@ export async function getOrderForViewer(
   const { order } = loaded;
   const isOwner = !!viewer.userId && order.userId === viewer.userId;
   if (!isOwner && !tokenMatches(viewer.token, order.accessTokenHash)) return null;
-  return toDetail(order, loaded.items, loaded.events);
+  const settings = await getSetting('returns');
+  const eligibility = computeReturnEligibility({
+    status: order.status,
+    deliveredAt: order.deliveredAt,
+    items: loaded.items.map((i) => ({ id: i.id, quantity: i.quantity })),
+    returns: loaded.returns,
+    settings,
+  });
+  return toDetail(order, loaded.items, loaded.events, loaded.returns, eligibility);
 }
 
 export async function listOrdersForUser(userId: string, page = 1, pageSize = 10) {
@@ -305,6 +363,7 @@ export async function trackOrder(orderNumber: string, phone: string) {
     phoneMasked: maskPhone(order.phone),
     courierName: order.courierName,
     trackingNumber: order.trackingNumber,
+    trackingUrl: order.trackingUrl,
     itemCount: items.reduce((s, i) => s + i.quantity, 0),
     events: events
       .filter((e) => e.visibleToCustomer)
@@ -326,14 +385,16 @@ export async function cancelOrderByCustomer(
     if (!locked || locked.status !== 'pending' || locked.paymentStatus === 'paid') {
       throw conflict('This order can no longer be cancelled online. Please contact customer care.', 'INVALID_TRANSITION');
     }
-    await cancelOrderTx(tx, detail.id, { message: 'Cancelled by the customer.', actorId: viewer.userId ?? null });
+    const updated = await cancelOrderTx(tx, detail.id, { message: 'Cancelled by the customer.', actorId: viewer.userId ?? null });
     if (locked.paymentMethod === 'sslcommerz') {
       await tx
         .update(paymentTransactions)
         .set({ status: 'cancelled', failureReason: 'Order cancelled by customer' })
         .where(and(eq(paymentTransactions.orderId, detail.id), sql`${paymentTransactions.status} IN ('initiated','pending')`));
     }
+    await queueOrderCancelledNotifications(tx, updated, 'You cancelled this order.');
   });
+  scheduleNotificationDispatch();
   return (await getOrderForViewer(orderNumber, viewer))!;
 }
 

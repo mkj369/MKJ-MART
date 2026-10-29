@@ -12,6 +12,7 @@ import {
 } from '@/server/auth/session';
 import { can, isStaffRole, type Permission } from '@/lib/permissions';
 import { zodFieldErrors } from '@/lib/validation/common';
+import { log } from '@/server/logger';
 import { clientIp, isSameOriginRequest, userAgent } from './request';
 
 type CookieOp =
@@ -142,7 +143,7 @@ export function route<P extends Record<string, string> = Record<string, never>>(
           : NextResponse.json({ data: result ?? null }, { headers: { 'cache-control': 'no-store' } });
       return applyCookies(response, cookieOps);
     } catch (error) {
-      return applyCookies(toErrorResponse(error), cookieOps);
+      return applyCookies(toErrorResponse(error, { method: req.method, path: req.nextUrl.pathname }), cookieOps);
     }
   };
 }
@@ -157,7 +158,7 @@ function applyCookies(response: Response, ops: CookieOp[]): Response {
   return res;
 }
 
-export function toErrorResponse(error: unknown): Response {
+export function toErrorResponse(error: unknown, request?: { method: string; path: string }): Response {
   if (isAppError(error)) {
     const res = jsonError(error.status, error.code, error.message, { fields: error.fields, details: error.details });
     if (error.status === 429) {
@@ -169,6 +170,11 @@ export function toErrorResponse(error: unknown): Response {
   if (error instanceof z.ZodError) {
     return jsonError(422, 'VALIDATION_ERROR', 'Please correct the highlighted fields.', { fields: zodFieldErrors(error) });
   }
-  console.error('[api] unhandled error', error);
-  return jsonError(500, 'INTERNAL_ERROR', 'Something went wrong on our side. Please try again.');
+  // Unexpected failure: log the full error server-side (secrets redacted) and give the client a
+  // reference it can quote to support, without leaking internals.
+  const errorId = crypto.randomUUID();
+  log.error('api.unhandled_error', { errorId, ...request, error });
+  return jsonError(500, 'INTERNAL_ERROR', `Something went wrong on our side. Please try again. (Ref ${errorId.slice(0, 8)})`, {
+    details: { errorId },
+  });
 }

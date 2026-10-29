@@ -13,7 +13,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   if (await getCurrentUser()) redirect(next);
   return (
     <AuthShell eyebrow="Welcome back" title="Sign in" subtitle="Track orders, save addresses and keep a wishlist.">
-      <LoginForm next={next} registerHref={`/register?next=${encodeURIComponent(next)}`} />
+      <LoginForm next={next} registerHref={`/register?next=${encodeURIComponent(next)}`} forgotHref="/forgot-password" />
     </AuthShell>
   );
 }

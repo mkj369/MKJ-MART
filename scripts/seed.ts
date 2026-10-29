@@ -4,11 +4,16 @@
  *   npm run db:seed              # base configuration only (sizes, colours, delivery zones) — safe in production
  *   npm run db:seed -- --demo    # + fictional demo catalogue, accounts, coupons and orders (is_demo = true)
  *
- * Demo data is refused when NODE_ENV=production unless --force is given. Remove demo data at any time
- * from Admin → Settings → Demo data.
+ * Demo data is refused when NODE_ENV=production unless DEMO_MODE=true (a deliberate public demo).
+ * Demo account passwords are RANDOM per seed run and printed once at the end — they are never stored
+ * in the repository. For local development you may set DEMO_ACCOUNT_PASSWORD in .env.local to get a
+ * stable password (ignored in production). Remove demo data from Admin → Settings → Demo data.
  */
 import { describeDatabase, hasFlag, requireDatabaseUrl } from './_env';
 import { randomBytes } from 'node:crypto';
+
+// Seeding replays real checkouts: never email/SMS the fictional demo customers.
+process.env.NOTIFICATIONS_DISABLED = '1';
 import { and, eq, sql } from 'drizzle-orm';
 import { closeDb, db } from '@/server/db';
 import {
@@ -32,8 +37,8 @@ import { hashPassword } from '@/server/auth/password';
 import { addToCart, ensureCart } from '@/server/services/cart';
 import { generateOrderNumber, placeOrder } from '@/server/services/checkout';
 import { updateOrderStatus } from '@/server/services/admin/orders';
-import { updateSetting, getSetting } from '@/server/services/settings';
 import type { CheckoutInput } from '@/lib/validation/store';
+import { adminPasswordProblem, passwordSchema } from '@/lib/validation/common';
 import {
   COLORS,
   DEMO_CATEGORIES,
@@ -67,6 +72,12 @@ async function seedAdminFromEnv() {
   const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
   const password = process.env.ADMIN_PASSWORD;
   if (!email || !password) return;
+  const problem = adminPasswordProblem(password, email);
+  if (problem) {
+    console.error(`✖ ADMIN_PASSWORD rejected: ${problem} No administrator was created.`);
+    process.exitCode = 1;
+    return;
+  }
   const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
   if (existing) return;
   await db.insert(users).values({
@@ -75,8 +86,27 @@ async function seedAdminFromEnv() {
     role: 'admin',
     passwordHash: await hashPassword(password),
   });
-  console.log(`  • Created administrator ${email} (from ADMIN_EMAIL / ADMIN_PASSWORD)`);
+  console.log(`  • Created administrator ${email} (from ADMIN_EMAIL / ADMIN_PASSWORD — remove ADMIN_PASSWORD from the environment now)`);
 }
+
+/**
+ * Demo passwords: random per run (printed once), or DEMO_ACCOUNT_PASSWORD for local development.
+ * Nothing guessable is ever published in the repository or the UI.
+ */
+function demoPasswords(): { admin: string; staff: string; customer: string; source: 'env' | 'random' } {
+  const fromEnv = process.env.DEMO_ACCOUNT_PASSWORD;
+  if (fromEnv && process.env.NODE_ENV !== 'production') {
+    if (!passwordSchema.safeParse(fromEnv).success) {
+      console.error('✖ DEMO_ACCOUNT_PASSWORD must have at least 8 characters with a letter and a number.');
+      process.exit(1);
+    }
+    return { admin: fromEnv, staff: fromEnv, customer: fromEnv, source: 'env' };
+  }
+  const random = () => `Demo-${randomBytes(9).toString('base64url')}7`;
+  return { admin: random(), staff: random(), customer: random(), source: 'random' };
+}
+const DEMO_PW = demoPasswords();
+const passwordFor = (role: 'admin' | 'staff' | 'customer') => DEMO_PW[role];
 
 function colorCode(name: string) {
   return name.replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase();
@@ -89,7 +119,7 @@ async function seedDemo() {
     .where(eq(products.isDemo, true));
   if (existing > 0) {
     console.log('  • Demo data already present — skipping. (Purge it from the admin, or run npm run db:reset.)');
-    return;
+    return false;
   }
 
   const sizeRows = await db.select().from(sizes);
@@ -178,7 +208,8 @@ async function seedDemo() {
       await db.insert(collectionProducts).values({ collectionId: collectionIds.get(slug)!, productId: product!.id, sortOrder: index });
     }
   }
-  console.log(`  • ${DEMO_PRODUCTS.filter((p) => p.status === 'active').length} live demo products, ${DEMO_PRODUCTS.filter((p) => p.status === 'draft').length} drafts awaiting photos`);
+  const drafts = DEMO_PRODUCTS.filter((p) => p.status === 'draft').length;
+  console.log(`  • ${DEMO_PRODUCTS.filter((p) => p.status === 'active').length} live demo products${drafts ? `, ${drafts} drafts` : ''}`);
 
   // Accounts
   const userIds = new Map<string, string>();
@@ -190,7 +221,7 @@ async function seedDemo() {
         name: u.name,
         phone: u.phone,
         role: u.role,
-        passwordHash: await hashPassword(u.password),
+        passwordHash: await hashPassword(passwordFor(u.role)),
         isDemo: true,
         createdAt: new Date(Date.now() - 45 * DAY),
       })
@@ -219,9 +250,6 @@ async function seedDemo() {
     });
   }
   console.log(`  • Coupons: ${DEMO_COUPONS.map((c) => c.code).join(', ')}`);
-
-  const store = await getSetting('store');
-  await updateSetting('store', { ...store, supportEmail: 'care@mkjmart.demo' });
 
   // Orders — placed through the real checkout service, then moved through the admin state machine.
   const adminId = userIds.get('admin@mkjmart.demo')!;
@@ -319,26 +347,27 @@ async function seedDemo() {
       .where(eq(stockMovements.orderId, result.orderId));
   }
   console.log(`  • ${DEMO_ORDERS.length} demo orders across the last 30 days (placed via the real checkout flow)`);
-
+  return true;
 }
 
 async function main() {
   const url = requireDatabaseUrl();
   const demo = hasFlag('demo');
-  if (demo && process.env.NODE_ENV === 'production' && !hasFlag('force')) {
-    console.error('✖ Refusing to load demo data with NODE_ENV=production. Pass --force if you really mean it.');
+  if (demo && process.env.NODE_ENV === 'production' && !['1', 'true', 'yes', 'on'].includes((process.env.DEMO_MODE ?? '').toLowerCase())) {
+    console.error('✖ Refusing to load demo data with NODE_ENV=production. Only a deliberate public demo (DEMO_MODE=true) may do this.');
     process.exit(1);
   }
   console.log(`→ Seeding ${describeDatabase(url)}${demo ? ' (with DEMO data)' : ''}`);
   await seedBase();
   await seedAdminFromEnv();
-  if (demo) await seedDemo();
+  const seededDemo = demo ? await seedDemo() : false;
   console.log('✔ Seed complete.');
-  if (demo) {
-    console.log('\n  Demo sign-ins (fictional — remove before launch):');
-    console.log('    Admin     admin@mkjmart.demo     / Admin@12345     → /admin');
-    console.log('    Staff     staff@mkjmart.demo     / Staff@12345     → /admin');
-    console.log('    Customer  customer@mkjmart.demo  / Customer@123    → /login');
+  if (demo && seededDemo) {
+    console.log(`\n  Demo sign-ins (fictional accounts — ${DEMO_PW.source === 'env' ? 'password from DEMO_ACCOUNT_PASSWORD' : 'random passwords, shown ONLY now'}):`);
+    console.log(`    Admin     admin@mkjmart.demo     ${DEMO_PW.admin}   → /admin`);
+    console.log(`    Staff     staff@mkjmart.demo     ${DEMO_PW.staff}   → /admin`);
+    console.log(`    Customer  customer@mkjmart.demo  ${DEMO_PW.customer}   → /login  (tanvir@, nusrat@, farhan@ use the same)`);
+    console.log('  Demo accounts can only sign in to a production build when DEMO_MODE=true. Remove demo data before launch.');
   }
 }
 

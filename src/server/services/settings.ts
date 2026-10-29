@@ -11,12 +11,18 @@ import { zodFieldErrors } from '@/lib/validation/common';
  * reviewed by the business before launch.
  */
 export const DEFAULT_SETTINGS: SettingsMap = {
+  // Business identity is intentionally BLANK: enter your real, verified details in Admin → Settings.
   store: {
     storeName: 'MKJ Store',
     tagline: 'Considered clothing, made in Bangladesh.',
     supportEmail: '',
     supportPhone: '',
+    whatsappNumber: '',
+    supportHours: '',
     address: '',
+    legalName: '',
+    tradeLicense: '',
+    vatRegistration: '',
     facebookUrl: '',
     instagramUrl: '',
   },
@@ -70,6 +76,39 @@ export const DEFAULT_SETTINGS: SettingsMap = {
       'All prices are in Bangladeshi Taka (৳) and include applicable VAT. Prices are verified when you place your order.',
       '## Contact',
       'Questions about these terms? Contact our customer care team.',
+    ].join('\n\n'),
+    reviewed: { shipping: false, returns: false, privacy: false, terms: false },
+  },
+  returns: {
+    enabled: true,
+    windowDays: 7,
+    instructions:
+      'Pack the items with their original tags and packaging. We will contact you to arrange a pickup or share the drop-off address. Refunds are issued after the items pass inspection.',
+  },
+  notifications: {
+    emailWelcome: true,
+    emailOrderUpdates: true,
+    emailReturnUpdates: true,
+    smsOrderUpdates: true,
+    staffEmail: '',
+    staffNewOrder: true,
+    staffNewReturn: true,
+    staffNewSupport: true,
+  },
+  support: {
+    contactFormEnabled: true,
+    responseTime: 'within one working day',
+    faq: [
+      '## How long does delivery take?',
+      'Delivery times depend on your district and are shown at checkout before you pay. Delays can happen during Eid and national holidays.',
+      '## Can I pay with Cash on Delivery?',
+      'Yes, where Cash on Delivery is available it is offered at checkout. Please keep the exact amount ready.',
+      '## How do I track my order?',
+      'Use Track order with your order number and the phone number used at checkout, or open the order from your account.',
+      '## How do returns work?',
+      'Delivered orders can be returned within the return window shown in our Returns policy. Request a return from your order page and we will guide you through the next steps.',
+      '## Is online payment secure?',
+      'Online payments are processed by our licensed payment gateway. We never see or store your card, bKash or Nagad credentials.',
     ].join('\n\n'),
   },
 };

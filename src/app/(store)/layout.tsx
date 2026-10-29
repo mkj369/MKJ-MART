@@ -22,7 +22,7 @@ export default async function StoreLayout({ children }: { children: React.ReactN
           <p className="container-x py-2 text-center text-[11.5px] leading-snug">
             <span className="font-medium uppercase tracking-[0.14em]">Demo store</span>
             <span className="mx-2 opacity-50">·</span>
-            Products, AI-generated photos, customers and orders are sample data. No real payments are taken.
+            Products, AI-generated photos, customers and orders are sample data — please don’t place real orders.
           </p>
         </div>
       ) : null}
@@ -42,6 +42,9 @@ export default async function StoreLayout({ children }: { children: React.ReactN
         supportEmail={store.supportEmail}
         supportPhone={store.supportPhone}
         address={store.address}
+        legalName={store.legalName}
+        tradeLicense={store.tradeLicense}
+        vatRegistration={store.vatRegistration}
         onlinePayments={shell.onlinePayments}
       />
     </StoreProvider>

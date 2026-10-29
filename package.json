@@ -2,7 +2,7 @@
   "name": "mkj-mart",
   "version": "0.1.0",
   "private": true,
-  "description": "MKJ MART \u2014 the e-commerce platform for MKJ Store, part of the MKJ Ecosystem.",
+  "description": "MKJ MART — the e-commerce platform for MKJ Store, part of the MKJ Ecosystem.",
   "license": "UNLICENSED",
   "engines": {
     "node": ">=20.9.0"
@@ -24,7 +24,8 @@
     "jobs:dispatch-events": "tsx --conditions=react-server scripts/jobs.ts dispatch-events",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "jobs:send-notifications": "tsx --conditions=react-server scripts/jobs.ts send-notifications"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.3.1",
@@ -33,6 +34,7 @@
     "drizzle-orm": "^0.45.4",
     "lucide-react": "^1.63.0",
     "next": "16.4.3",
+    "nodemailer": "^10.3.1",
     "pg": "^8.23.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
@@ -43,6 +45,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@playwright/test": "^1.64.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^22.20.5",
@@ -53,6 +56,7 @@
     "embedded-postgres": "18.4.0-beta.17",
     "eslint": "^9",
     "eslint-config-next": "16.4.3",
+    "smtp-server": "^3.21.3",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",

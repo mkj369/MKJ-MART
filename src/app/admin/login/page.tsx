@@ -5,7 +5,6 @@ import { Logo } from '@/components/brand/logo';
 import { Alert } from '@/components/ui/feedback';
 import { LoginForm } from '@/components/store/auth-forms';
 import { getCurrentUser } from '@/server/auth/current-user';
-import { hasDemoCatalog } from '@/server/services/catalog';
 import { isStaffRole } from '@/lib/permissions';
 import { safeRedirectPath } from '@/lib/utils';
 
@@ -17,7 +16,6 @@ export default async function AdminLoginPage({ searchParams }: { searchParams: P
   const target = next.startsWith('/admin') ? next : '/admin';
   const user = await getCurrentUser();
   if (user && isStaffRole(user.role)) redirect(target);
-  const demo = await hasDemoCatalog();
 
   return (
     <div className="grid min-h-dvh lg:grid-cols-2">
@@ -44,14 +42,10 @@ export default async function AdminLoginPage({ searchParams }: { searchParams: P
           <div className="mt-8">
             <LoginForm next={target} endpoint="/api/v1/admin/auth/login" />
           </div>
-          {demo ? (
-            <div className="mt-8 border border-gold-light bg-[#faf6ee] p-4 text-[12.5px] leading-relaxed text-gold-deep" data-testid="demo-credentials">
-              <p className="font-medium uppercase tracking-[0.12em]">Demo accounts</p>
-              <p className="mt-1.5">Admin: admin@mkjmart.demo / Admin@12345</p>
-              <p>Staff: staff@mkjmart.demo / Staff@12345</p>
-              <p className="mt-1.5 opacity-80">Shown only while demo data exists. Purge it in Settings → Demo data before launch.</p>
-            </div>
-          ) : null}
+          <p className="mt-6 text-[12.5px] leading-relaxed text-muted">
+            Forgot your password? Ask an administrator to reset it. Administrators can reset any staff password from the server with{' '}
+            <code className="bg-bone px-1">npm run admin:create</code>.
+          </p>
           <p className="mt-10 text-[13px] text-muted">
             <Link href="/" className="underline underline-offset-4 hover:text-ink">
               ← Back to the store

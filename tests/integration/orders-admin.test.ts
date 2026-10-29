@@ -5,7 +5,7 @@ import { coupons, orders, productVariants, stockMovements } from '@/server/db/sc
 import { addToCart, ensureCart } from '@/server/services/cart';
 import { placeOrder } from '@/server/services/checkout';
 import { cancelOrderByCustomer, getOrderForViewer, trackOrder } from '@/server/services/orders';
-import { updateOrderPayment, updateOrderStatus } from '@/server/services/admin/orders';
+import { recordRefund, updateOrderPayment, updateOrderStatus } from '@/server/services/admin/orders';
 import { adjustStock } from '@/server/services/admin/inventory';
 import { createProduct as createProductAdmin, deleteProduct, updateProduct, getProductAdmin } from '@/server/services/admin/products';
 import { getDashboard } from '@/server/services/admin/dashboard';
@@ -72,24 +72,35 @@ describe('order fulfilment (admin)', () => {
     expect(await stockOf(order.variantId)).toBe(10);
   });
 
-  it('records returns back into stock and allows a refund to be recorded', async () => {
+  it('returned-to-sender restocks everything and a refund can then be recorded in the ledger', async () => {
     const order = await newOrder({ quantity: 1 });
     for (const status of ['confirmed', 'processing'] as const) await updateOrderStatus(order.orderId, { status, note: null, courierName: null, trackingNumber: null }, adminId);
-    await updateOrderStatus(order.orderId, { status: 'shipped', note: null, courierName: 'RedX', trackingNumber: null }, adminId);
+    await updateOrderStatus(order.orderId, { status: 'shipped', note: null, courierName: 'RedX', trackingNumber: null, trackingUrl: 'https://redx.com.bd/track/1' }, adminId);
+    expect((await orderOf(order.orderId)).trackingUrl).toBe('https://redx.com.bd/track/1');
     await updateOrderStatus(order.orderId, { status: 'delivered', note: null, courierName: null, trackingNumber: null }, adminId);
     expect(await stockOf(order.variantId)).toBe(9);
     await updateOrderStatus(order.orderId, { status: 'returned', note: null, courierName: null, trackingNumber: null }, adminId);
     expect(await stockOf(order.variantId)).toBe(10);
-    await updateOrderPayment(order.orderId, 'mark_refunded', 'bKash refund TX123', adminId);
-    expect((await orderOf(order.orderId)).paymentStatus).toBe('refunded');
+    const total = (await orderOf(order.orderId)).total;
+    // Over-refunding is impossible; the refund must be confirmed as already paid outside the platform.
+    expect(await code(recordRefund(order.orderId, { amount: total + 1, method: 'bkash', reference: null, note: null, confirmPaidOutside: true }, adminId))).toBe('VALIDATION_ERROR');
+    await recordRefund(order.orderId, { amount: 50_000, method: 'bkash', reference: 'TX123', note: null, confirmPaidOutside: true }, adminId);
+    expect(await orderOf(order.orderId)).toMatchObject({ paymentStatus: 'partially_refunded', refundedTotal: 50_000 });
+    await recordRefund(order.orderId, { amount: total - 50_000, method: 'bkash', reference: 'TX124', note: null, confirmPaidOutside: true }, adminId);
+    expect(await orderOf(order.orderId)).toMatchObject({ paymentStatus: 'refunded', refundedTotal: total });
+    expect(await code(recordRefund(order.orderId, { amount: 1, method: 'cash', reference: null, note: null, confirmPaidOutside: true }, adminId))).toBe('INVALID_TRANSITION');
   });
 
-  it('only allows manual payment marking for COD orders', async () => {
+  it('only allows manual payment marking for COD orders, and refunds only for paid orders', async () => {
     const order = await newOrder();
+    expect(await code(recordRefund(order.orderId, { amount: 1_000, method: 'cash', reference: null, note: 'goodwill', confirmPaidOutside: true }, adminId))).toBe('INVALID_TRANSITION');
     await updateOrderPayment(order.orderId, 'mark_paid', null, adminId);
     expect((await orderOf(order.orderId)).paymentStatus).toBe('paid');
     expect(await code(updateOrderPayment(order.orderId, 'mark_paid', null, adminId))).toBe('NO_CHANGE');
-    expect(await code(updateOrderPayment(order.orderId, 'mark_refunded', null, adminId))).toBe('INVALID_TRANSITION');
+    // A goodwill refund on an active order needs a written reason.
+    expect(await code(recordRefund(order.orderId, { amount: 1_000, method: 'cash', reference: null, note: null, confirmPaidOutside: true }, adminId))).toBe('VALIDATION_ERROR');
+    await recordRefund(order.orderId, { amount: 1_000, method: 'cash', reference: null, note: 'Late delivery goodwill', confirmPaidOutside: true }, adminId);
+    expect((await orderOf(order.orderId)).paymentStatus).toBe('partially_refunded');
   });
 });
 

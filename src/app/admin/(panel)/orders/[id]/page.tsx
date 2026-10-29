@@ -1,13 +1,16 @@
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Badge } from '@/components/ui/feedback';
+import { Alert, Badge } from '@/components/ui/feedback';
 import { OrderStatusBadge, PageHeader, Panel, PaymentStatusBadge } from '@/components/admin/ui';
-import { AdminNoteEditor, OrderWorkflow } from '@/components/admin/order-actions';
+import { AdminNoteEditor, OrderWorkflow, ReconcileButton, RefundPanel, ShippingEditor } from '@/components/admin/order-actions';
 import { requireAdminPage } from '@/server/auth/current-user';
+import { sslcommerzConfig } from '@/server/env';
 import { getOrderAdmin } from '@/server/services/admin/orders';
 import { formatBDT } from '@/lib/money';
 import { ORDER_TRANSITIONS, PAYMENT_METHOD_LABEL, transitionBlockedByPayment } from '@/lib/order-status';
+import { can } from '@/lib/permissions';
+import { REFUND_METHOD_LABEL, RETURN_STATUS_LABEL, type RefundMethod } from '@/lib/returns';
 import { formatBdPhone } from '@/lib/phone';
 import { cn, formatDateTime } from '@/lib/utils';
 
@@ -15,8 +18,10 @@ export const metadata: Metadata = { title: 'Order' };
 
 export default async function AdminOrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  await requireAdminPage('orders:manage', `/admin/orders/${id}`);
-  const { order, items, events, transactions, customer } = await getOrderAdmin(id);
+  const viewer = await requireAdminPage('orders:manage', `/admin/orders/${id}`);
+  const { order, items, events, transactions, customer, notifications, returns, refunds, riskFlagged } = await getOrderAdmin(id);
+  const refundable = order.paymentStatus === 'paid' || order.paymentStatus === 'partially_refunded' ? order.total - order.refundedTotal : 0;
+  const gatewayConfigured = !!sslcommerzConfig();
   const transitions = ORDER_TRANSITIONS[order.status].map((to) => ({
     to,
     blocked: transitionBlockedByPayment(order.paymentMethod, order.paymentStatus, to),
@@ -36,6 +41,17 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
         }
       />
 
+      {riskFlagged ? (
+        <Alert tone="danger" className="mb-6" title="High-risk payment">
+          SSLCommerz flagged the payment for this order as risky. Hold the order and verify the customer (e.g. call them, ask for ID) before shipping.
+        </Alert>
+      ) : null}
+      {order.isDemo ? (
+        <Alert tone="info" className="mb-6">
+          This is a demo order created by the seed script. It is fictional; no notifications are sent for it and it is removed by “Remove demo data”.
+        </Alert>
+      ) : null}
+
       <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
         <div className="space-y-6">
           <OrderWorkflow
@@ -46,6 +62,7 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
             transitions={transitions}
             courierName={order.courierName}
             trackingNumber={order.trackingNumber}
+            trackingUrl={order.trackingUrl}
           />
 
           <Panel title={`Items (${items.reduce((s, i) => s + i.quantity, 0)})`} bodyClassName="p-0">
@@ -107,6 +124,33 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
               ))}
             </ol>
           </Panel>
+
+          <Panel title="Customer notifications" bodyClassName="p-0">
+            {notifications.length === 0 ? (
+              <p className="px-5 py-4 text-[13px] text-muted">No email or SMS notifications for this order yet.</p>
+            ) : (
+              <ul className="divide-y divide-line text-[12.5px]">
+                {notifications.map((n) => (
+                  <li key={n.id} className="grid gap-0.5 px-5 py-3 sm:grid-cols-[1fr_auto]">
+                    <div className="min-w-0">
+                      <p className="truncate">
+                        <span className="mr-2 uppercase tracking-[0.08em] text-muted">{n.channel}</span>
+                        {n.subject ?? n.template.replace(/_/g, ' ')}
+                      </p>
+                      <p className="truncate text-muted">
+                        To {n.recipient} · {formatDateTime(n.createdAt)}
+                        {n.attempts > 1 ? ` · ${n.attempts} attempts` : ''}
+                      </p>
+                      {n.lastError ? <p className="text-danger">{n.lastError}</p> : null}
+                    </div>
+                    <Badge tone={n.status === 'sent' ? 'success' : n.status === 'failed' ? 'danger' : n.status === 'pending' ? 'warning' : 'neutral'}>
+                      {n.status === 'skipped' ? 'not sent' : n.status}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
         </div>
 
         <div className="space-y-6">
@@ -140,6 +184,73 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
             {order.customerNote ? <p className="mt-3 border-l-2 border-gold pl-3 text-[13px] italic text-muted">“{order.customerNote}”</p> : null}
           </Panel>
           <AdminNoteEditor orderId={order.id} initial={order.adminNote ?? ''} />
+          {order.status === 'shipped' || order.status === 'delivered' ? (
+            <ShippingEditor orderId={order.id} courierName={order.courierName} trackingNumber={order.trackingNumber} trackingUrl={order.trackingUrl} />
+          ) : null}
+          {returns.length ? (
+            <Panel title="Return requests" bodyClassName="p-0">
+              <ul className="divide-y divide-line text-[13px]">
+                {returns.map((r) => (
+                  <li key={r.id} className="flex items-center justify-between gap-3 px-5 py-3">
+                    <Link href={`/admin/returns/${r.id}`} className="font-medium underline-offset-4 hover:underline">
+                      {r.requestNumber}
+                    </Link>
+                    <span className="text-[12px] text-muted">{RETURN_STATUS_LABEL[r.status]}</span>
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+          ) : null}
+          <Panel title="Payment & refunds">
+            <dl className="space-y-1.5 text-[13.5px]">
+              <div className="flex justify-between">
+                <dt className="text-muted">Method</dt>
+                <dd>{PAYMENT_METHOD_LABEL[order.paymentMethod]}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-muted">Status</dt>
+                <dd>
+                  <PaymentStatusBadge status={order.paymentStatus} />
+                </dd>
+              </div>
+              {order.refundedTotal ? (
+                <div className="flex justify-between">
+                  <dt className="text-muted">Refunded</dt>
+                  <dd className="tabular-nums">{formatBDT(order.refundedTotal)}</dd>
+                </div>
+              ) : null}
+            </dl>
+            {refunds.length ? (
+              <ul className="mt-4 space-y-2 border-t border-line pt-3 text-[12.5px]">
+                {refunds.map((r) => (
+                  <li key={r.id}>
+                    <p className="flex justify-between">
+                      <span>{REFUND_METHOD_LABEL[r.method as RefundMethod] ?? r.method}</span>
+                      <span className="tabular-nums">{formatBDT(r.amount)}</span>
+                    </p>
+                    <p className="text-muted">
+                      {formatDateTime(r.createdAt)}
+                      {r.actorName ? ` · ${r.actorName}` : ''}
+                      {r.reference ? ` · Ref ${r.reference}` : ''}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <RefundPanel
+                orderId={order.id}
+                refundable={refundable}
+                paymentMethod={order.paymentMethod}
+                returnRequests={returns}
+                canRecord={can(viewer.role, 'refunds:manage')}
+              />
+              {order.paymentMethod === 'sslcommerz' && gatewayConfigured ? <ReconcileButton orderId={order.id} /> : null}
+            </div>
+            {refundable > 0 && !can(viewer.role, 'refunds:manage') ? (
+              <p className="mt-3 text-[12px] text-muted">Refunds are recorded by an administrator.</p>
+            ) : null}
+          </Panel>
           {transactions.length ? (
             <Panel title="Payment transactions" bodyClassName="p-0">
               <ul className="divide-y divide-line text-[12.5px]">

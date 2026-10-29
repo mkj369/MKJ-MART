@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { isValidDistrict } from '@/lib/bd-geo';
-import { ORDER_STATUSES } from '@/lib/order-status';
+import { ORDER_STATUSES, PAYMENT_STATUSES } from '@/lib/order-status';
 import { ROLES } from '@/lib/permissions';
+import { REFUND_METHODS, RETURN_STATUSES } from '@/lib/returns';
 import { imageUrlSchema, optionalPhoneSchema, uuidSchema } from './common';
 
 const slugSchema = z
@@ -158,17 +159,68 @@ export const stockAdjustmentSchema = z.object({
 });
 export type StockAdjustmentInput = z.infer<typeof stockAdjustmentSchema>;
 
+const optionalHttpsUrl = z
+  .string()
+  .trim()
+  .max(300)
+  .optional()
+  .nullable()
+  .transform((v) => (v ? v : null))
+  .refine((v) => v === null || /^https:\/\/[^\s]+$/i.test(v), 'Use a full https:// tracking link.');
+
 export const orderStatusUpdateSchema = z.object({
   status: z.enum(ORDER_STATUSES),
   note: optionalText(500),
   courierName: optionalText(80),
   trackingNumber: optionalText(80),
+  trackingUrl: optionalHttpsUrl,
 });
-export type OrderStatusUpdateInput = z.infer<typeof orderStatusUpdateSchema>;
+export type OrderStatusUpdateInput = Omit<z.infer<typeof orderStatusUpdateSchema>, 'trackingUrl'> & { trackingUrl?: string | null };
 
 export const orderPaymentUpdateSchema = z.object({
-  action: z.enum(['mark_paid', 'mark_refunded']),
+  action: z.literal('mark_paid'),
   note: optionalText(300),
+});
+
+/** Records a refund that was ALREADY paid outside the platform (gateway panel, bKash, bank…). */
+export const refundInputSchema = z.object({
+  amount: z.number({ error: 'Enter the refunded amount.' }).int().positive('Amount must be greater than zero.').max(100_000_000),
+  method: z.enum(REFUND_METHODS, { error: 'Choose how the refund was paid.' }),
+  reference: optionalText(120),
+  note: optionalText(500),
+  returnRequestId: uuidSchema.optional().nullable(),
+  confirmPaidOutside: z.literal(true, { error: 'Confirm that the money has already been refunded.' }),
+});
+export type RefundInput = z.infer<typeof refundInputSchema>;
+
+export const returnDecisionSchema = z.object({
+  action: z.enum(['approve', 'reject', 'receive']),
+  /** Shown to the customer (instructions on approval, reason on rejection). */
+  customerNote: optionalText(1000),
+  adminNote: optionalText(1000),
+  /** On "receive": put the returned units back into sellable stock. */
+  restock: z.boolean().optional().default(true),
+});
+export type ReturnDecisionInput = z.infer<typeof returnDecisionSchema>;
+
+export const returnListQuerySchema = z.object({
+  status: z.enum([...RETURN_STATUSES, 'all', 'open']).optional().default('open'),
+  page: z.coerce.number().int().min(1).max(10_000).optional().default(1),
+});
+
+export const supportUpdateSchema = z.object({
+  status: z.enum(['open', 'in_progress', 'resolved']),
+  adminNote: optionalText(2000),
+});
+
+export const supportListQuerySchema = z.object({
+  status: z.enum(['open', 'in_progress', 'resolved', 'all', 'active']).optional().default('active'),
+  page: z.coerce.number().int().min(1).max(10_000).optional().default(1),
+});
+
+export const testNotificationSchema = z.object({
+  channel: z.enum(['email', 'sms']),
+  to: z.string().trim().min(3).max(255),
 });
 
 export const orderNoteSchema = z.object({ adminNote: optionalText(2000) });
@@ -176,7 +228,7 @@ export const orderNoteSchema = z.object({ adminNote: optionalText(2000) });
 export const orderListQuerySchema = z.object({
   q: z.string().trim().max(100).optional(),
   status: z.enum([...ORDER_STATUSES, 'all']).optional().default('all'),
-  payment: z.enum(['all', 'unpaid', 'pending', 'paid', 'failed', 'cancelled', 'refunded']).optional().default('all'),
+  payment: z.enum(['all', ...PAYMENT_STATUSES]).optional().default('all'),
   page: z.coerce.number().int().min(1).max(10_000).optional().default(1),
 });
 
@@ -264,7 +316,13 @@ export const storeSettingsSchema = z.object({
   tagline: z.string().trim().max(160),
   supportEmail: z.union([z.literal(''), z.email({ error: 'Enter a valid email.' })]),
   supportPhone: optionalPhoneSchema.transform((v) => v ?? ''),
+  whatsappNumber: optionalPhoneSchema.transform((v) => v ?? ''),
+  supportHours: z.string().trim().max(120),
   address: z.string().trim().max(300),
+  /** Registered business name, trade licence and VAT/BIN as they should appear on receipts. */
+  legalName: z.string().trim().max(160),
+  tradeLicense: z.string().trim().max(60),
+  vatRegistration: z.string().trim().max(60),
   facebookUrl: z.union([z.literal(''), z.url({ protocol: /^https$/, error: 'Use an https:// link.' })]),
   instagramUrl: z.union([z.literal(''), z.url({ protocol: /^https$/, error: 'Use an https:// link.' })]),
 });
@@ -279,11 +337,41 @@ export const checkoutSettingsSchema = z.object({
   lowStockThreshold: z.number().int().min(0).max(1000),
 });
 
+export const POLICY_KEYS = ['shipping', 'returns', 'privacy', 'terms'] as const;
+export type PolicyKey = (typeof POLICY_KEYS)[number];
+
 export const policySettingsSchema = z.object({
   shipping: z.string().max(20_000),
   returns: z.string().max(20_000),
   privacy: z.string().max(20_000),
   terms: z.string().max(20_000),
+  /** Until a policy is marked reviewed by the business, the storefront labels it as a template. */
+  reviewed: z.object({ shipping: z.boolean(), returns: z.boolean(), privacy: z.boolean(), terms: z.boolean() }),
+});
+
+export const returnSettingsSchema = z.object({
+  enabled: z.boolean(),
+  windowDays: z.number({ error: 'Enter a number of days.' }).int().min(1, 'At least 1 day.').max(60, 'At most 60 days.'),
+  /** Shown to the customer once a return is approved (pickup / drop-off instructions). */
+  instructions: z.string().trim().max(2000),
+});
+
+export const notificationSettingsSchema = z.object({
+  emailWelcome: z.boolean(),
+  emailOrderUpdates: z.boolean(),
+  emailReturnUpdates: z.boolean(),
+  smsOrderUpdates: z.boolean(),
+  /** Internal address for new-order / return / support alerts. Blank = no staff alerts. */
+  staffEmail: z.union([z.literal(''), z.email({ error: 'Enter a valid email.' })]),
+  staffNewOrder: z.boolean(),
+  staffNewReturn: z.boolean(),
+  staffNewSupport: z.boolean(),
+});
+
+export const supportSettingsSchema = z.object({
+  contactFormEnabled: z.boolean(),
+  responseTime: z.string().trim().max(120),
+  faq: z.string().max(20_000),
 });
 
 export const announcementSettingsSchema = z.object({
@@ -296,6 +384,9 @@ export const SETTINGS_SCHEMAS = {
   checkout: checkoutSettingsSchema,
   policies: policySettingsSchema,
   announcement: announcementSettingsSchema,
+  returns: returnSettingsSchema,
+  notifications: notificationSettingsSchema,
+  support: supportSettingsSchema,
 } as const;
 export type SettingsKey = keyof typeof SETTINGS_SCHEMAS;
 export type SettingsMap = { [K in SettingsKey]: z.output<(typeof SETTINGS_SCHEMAS)[K]> };

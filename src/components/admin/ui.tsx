@@ -6,6 +6,7 @@ import {
   type OrderStatus,
   type PaymentStatus,
 } from '@/lib/order-status';
+import { RETURN_STATUS_LABEL, type ReturnStatus } from '@/lib/returns';
 import { cn } from '@/lib/utils';
 
 export function PageHeader({
@@ -81,6 +82,7 @@ const PAYMENT_TONE: Record<PaymentStatus, BadgeTone> = {
   failed: 'danger',
   cancelled: 'neutral',
   refunded: 'info',
+  partially_refunded: 'info',
 };
 
 export function OrderStatusBadge({ status }: { status: OrderStatus }) {
@@ -136,4 +138,9 @@ export function StatCard({ label, value, hint, change }: { label: string; value:
       </div>
     </div>
   );
+}
+
+export function ReturnStatusBadge({ status }: { status: ReturnStatus }) {
+  const tone = status === 'requested' ? 'warning' : status === 'approved' || status === 'received' ? 'info' : status === 'refunded' ? 'success' : 'neutral';
+  return <Badge tone={tone}>{RETURN_STATUS_LABEL[status]}</Badge>;
 }

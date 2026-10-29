@@ -9,6 +9,9 @@ export function SiteFooter({
   supportEmail,
   supportPhone,
   address,
+  legalName,
+  tradeLicense,
+  vatRegistration,
   onlinePayments,
 }: {
   categories: NavCategory[];
@@ -17,6 +20,9 @@ export function SiteFooter({
   supportEmail: string;
   supportPhone: string;
   address: string;
+  legalName: string;
+  tradeLicense: string;
+  vatRegistration: string;
   onlinePayments: boolean;
 }) {
   const year = new Date().getFullYear();
@@ -35,7 +41,13 @@ export function SiteFooter({
                 </a>
               </p>
             ) : null}
-            {supportPhone ? <p>{supportPhone}</p> : null}
+            {supportPhone ? (
+              <p>
+                <a href={`tel:${supportPhone}`} className="transition-colors hover:text-paper">
+                  {supportPhone}
+                </a>
+              </p>
+            ) : null}
             {address ? <p>{address}</p> : null}
           </div>
         </div>
@@ -46,6 +58,7 @@ export function SiteFooter({
         <FooterColumn
           title="Help"
           links={[
+            { label: 'Help & contact', href: '/support' },
             { label: 'Track your order', href: '/track-order' },
             { label: 'Delivery & charges', href: '/policies/shipping' },
             { label: 'Returns & exchanges', href: '/policies/returns' },
@@ -62,9 +75,16 @@ export function SiteFooter({
       </div>
       <div className="border-t border-paper/10">
         <div className="container-x flex flex-col gap-5 py-7 text-[12px] text-paper/55 lg:flex-row lg:items-center lg:justify-between">
-          <p>
-            © {year} {storeName}. Part of the <span className="text-gold-light">MKJ Ecosystem</span>. All prices in BDT (৳), VAT included.
-          </p>
+          <div className="space-y-1">
+            <p>
+              © {year} {legalName || storeName}. Part of the <span className="text-gold-light">MKJ Ecosystem</span>. All prices in BDT (৳), VAT included.
+            </p>
+            {tradeLicense || vatRegistration ? (
+              <p className="text-paper/45">
+                {[tradeLicense ? `Trade licence ${tradeLicense}` : null, vatRegistration ? `VAT/BIN ${vatRegistration}` : null].filter(Boolean).join(' · ')}
+              </p>
+            ) : null}
+          </div>
           <ul className="flex flex-wrap gap-2" aria-label="Accepted payment methods">
             {methods.map((m) => (
               <li key={m} className="border border-paper/15 px-2.5 py-1 text-[10.5px] uppercase tracking-[0.12em] text-paper/70">

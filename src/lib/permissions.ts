@@ -10,6 +10,9 @@ export const PERMISSIONS = [
   'catalog:manage',
   'inventory:manage',
   'orders:manage',
+  'returns:manage',
+  'refunds:manage',
+  'support:manage',
   'customers:view',
   'customers:manage',
   'coupons:manage',
@@ -20,7 +23,7 @@ export type Permission = (typeof PERMISSIONS)[number];
 
 const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   customer: [],
-  staff: ['dashboard:view', 'catalog:manage', 'inventory:manage', 'orders:manage', 'customers:view'],
+  staff: ['dashboard:view', 'catalog:manage', 'inventory:manage', 'orders:manage', 'returns:manage', 'support:manage', 'customers:view'],
   admin: PERMISSIONS,
 };
 

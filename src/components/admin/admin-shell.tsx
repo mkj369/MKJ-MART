@@ -10,9 +10,11 @@ import {
   FolderTree,
   LayoutDashboard,
   Layers,
+  LifeBuoy,
   LogOut,
   Menu,
   Palette,
+  RotateCcw,
   Settings,
   ShoppingBag,
   Shirt,
@@ -28,6 +30,8 @@ import { cn } from '@/lib/utils';
 const NAV: { href: string; label: string; icon: typeof LayoutDashboard; permission: Permission; group: string }[] = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard:view', group: 'Overview' },
   { href: '/admin/orders', label: 'Orders', icon: ShoppingBag, permission: 'orders:manage', group: 'Sales' },
+  { href: '/admin/returns', label: 'Returns', icon: RotateCcw, permission: 'returns:manage', group: 'Sales' },
+  { href: '/admin/support', label: 'Support inbox', icon: LifeBuoy, permission: 'support:manage', group: 'Sales' },
   { href: '/admin/customers', label: 'Customers', icon: Users, permission: 'customers:view', group: 'Sales' },
   { href: '/admin/coupons', label: 'Coupons', icon: BadgePercent, permission: 'coupons:manage', group: 'Sales' },
   { href: '/admin/products', label: 'Products', icon: Shirt, permission: 'catalog:manage', group: 'Catalogue' },
@@ -41,11 +45,12 @@ const NAV: { href: string; label: string; icon: typeof LayoutDashboard; permissi
 
 export function AdminShell({
   user,
-  pendingOrders,
+  badges,
   children,
 }: {
   user: { name: string; email: string; role: Role };
-  pendingOrders: number;
+  /** Count bubbles keyed by nav href (pending orders, open returns, open support requests). */
+  badges: Record<string, number>;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -99,8 +104,8 @@ export function AdminShell({
                       >
                         <Icon className="h-4 w-4 shrink-0" strokeWidth={1.5} />
                         <span className="flex-1">{label}</span>
-                        {href === '/admin/orders' && pendingOrders > 0 ? (
-                          <span className="rounded-full bg-gold px-1.5 py-0.5 text-[10px] font-medium leading-none text-ink">{pendingOrders}</span>
+                        {(badges[href] ?? 0) > 0 ? (
+                          <span className="rounded-full bg-gold px-1.5 py-0.5 text-[10px] font-medium leading-none text-ink">{badges[href]}</span>
                         ) : null}
                       </Link>
                     </li>

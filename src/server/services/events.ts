@@ -17,6 +17,11 @@ export type DomainEventType =
   | 'payment.succeeded'
   | 'payment.failed'
   | 'customer.registered'
+  | 'customer.password_reset'
+  | 'order.refunded'
+  | 'return.requested'
+  | 'return.updated'
+  | 'support.created'
   | 'inventory.low_stock';
 
 export async function recordEvent(
