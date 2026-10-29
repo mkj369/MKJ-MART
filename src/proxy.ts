@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { frameAncestorsSources } from '@/lib/csp';
 
 /**
  * Runs before page routes:
@@ -9,7 +10,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 const SESSION_COOKIE = 'mkj_session';
 
 function contentSecurityPolicy(nonce: string, isDev: boolean): string {
-  const frameAncestors = process.env.CSP_FRAME_ANCESTORS?.trim() || "'self'";
+  const frameAncestors = frameAncestorsSources(process.env.CSP_FRAME_ANCESTORS);
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ''}`,

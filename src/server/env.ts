@@ -19,6 +19,19 @@ export function cookieSecure(): boolean {
   return bool(process.env.COOKIE_SECURE, isProduction());
 }
 
+export type CookieSameSite = 'lax' | 'strict' | 'none';
+
+/**
+ * SameSite policy for the session and guest-cart cookies. Keep the default (`lax`) for real
+ * deployments. `none` exists only for serving the store inside a cross-site iframe — e.g. a hosted
+ * preview panel — where browsers drop Lax cookies; see docs/SECURITY.md. CSRF protection does not
+ * depend on SameSite: every cookie-authenticated mutation is checked by isSameOriginRequest().
+ */
+export function cookieSameSite(): CookieSameSite {
+  const value = process.env.COOKIE_SAMESITE?.trim().toLowerCase();
+  return value === 'none' || value === 'strict' ? value : 'lax';
+}
+
 export function trustProxy(): boolean {
   return bool(process.env.TRUST_PROXY, false);
 }

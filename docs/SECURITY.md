@@ -18,6 +18,7 @@ integration and E2E tests) and a production rehearsal behind Caddy over HTTPS.
 | 8 | Medium | Demo seed wrote a demo support email into the real (non-demo) store settings. | Removed; business details start blank. |
 | 9 | Low | Online payment allowed totals outside SSLCommerz's ৳10–৳5,00,000 range (gateway error after the order was created). | Rejected before order creation and hidden in the quote. |
 | 10 | Low | Text colour `text-faint` failed WCAG AA contrast. | Raised to ≥4.5:1 (axe scans now clean on ten pages). |
+| 11 | Low | `CSP_FRAME_ANCESTORS='self'` from the env examples reached the header as a bare `self` (env parsers strip the quotes) — a host named "self", so the documented setting did not mean what it said. Sign-out cleared cookies with a bare `Max-Age=0`, without their attributes. | Bare `self`/`none` are re-quoted; cookies are cleared with their full attribute set. Unit-tested. |
 
 ## Verified controls
 
@@ -28,6 +29,11 @@ integration and E2E tests) and a production rehearsal behind Caddy over HTTPS.
   revocation on block/role change/password change/reset.
 * **CSRF**: cross-site mutations rejected (verified through the proxy); payment callbacks are the only exemption
   and never trust posted data.
+* **Embedding**: by default `frame-ancestors 'self'` and `SameSite=Lax` cookies. Serving the store inside a
+  cross-site iframe (e.g. a hosted preview panel) needs both `CSP_FRAME_ANCESTORS` listing the embedding origins
+  and `COOKIE_SAMESITE=none`, which forces `Secure; Partitioned` so browsers that block third-party cookies keep
+  a per-embedder jar. CSRF checks do not rely on SameSite, but keep both defaults on a real store: letting other
+  sites frame a signed-in store invites clickjacking.
 * **Rate limits**: login, registration, checkout, tracking, password reset, returns, support, payment retry,
   notification tests; behind Caddy (`TRUST_PROXY=1`) spoofed `X-Forwarded-For` does not bypass them (verified).
 * **Input validation**: Zod on every body/query; UUID guards on path ids; JSON-only bodies ≤ 256 KB.

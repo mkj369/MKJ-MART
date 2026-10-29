@@ -2,7 +2,7 @@ import 'server-only';
 import { and, eq, gt, lt, ne } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { sessions, users } from '@/server/db/schema';
-import { cookieSecure, demoLoginAllowed } from '@/server/env';
+import { demoLoginAllowed } from '@/server/env';
 import type { Role } from '@/lib/permissions';
 import { generateToken, sha256Hex } from './tokens';
 
@@ -112,22 +112,4 @@ export async function invalidateUserSessions(userId: string, exceptSessionId?: s
     .where(exceptSessionId ? and(eq(sessions.userId, userId), ne(sessions.id, exceptSessionId)) : eq(sessions.userId, userId));
 }
 
-export function sessionCookieOptions(expiresAt: Date) {
-  return {
-    httpOnly: true,
-    secure: cookieSecure(),
-    sameSite: 'lax' as const,
-    path: '/',
-    expires: expiresAt,
-  };
-}
-
-export function guestCartCookieOptions() {
-  return {
-    httpOnly: true,
-    secure: cookieSecure(),
-    sameSite: 'lax' as const,
-    path: '/',
-    maxAge: 60 * 24 * 60 * 60, // 60 days
-  };
-}
+export { expiredCookieOptions, guestCartCookieOptions, sessionCookieOptions } from './cookies';

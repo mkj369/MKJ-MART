@@ -91,6 +91,18 @@ the repository or shown in the UI. For a stable local password set `DEMO_ACCOUNT
 | `npm run mail:dev` | Local mail catcher (development/E2E only) |
 | `npm run lint` · `typecheck` · `test` · `test:e2e` | Quality gates |
 
+**Embedded preview (iframe).** Hosted preview panels show the site inside a cross-site iframe, where the default
+`frame-ancestors 'self'` policy blocks it and browsers drop `SameSite=Lax` cookies (no cart, no sign-in). For such
+a demo preview only, run the production build with:
+
+```bash
+npm run build
+DEMO_MODE=true COOKIE_SAMESITE=none CSP_FRAME_ANCESTORS="self https:" npx next start -H 0.0.0.0 -p 3000
+```
+
+Keep the defaults on a real store (see [docs/SECURITY.md](docs/SECURITY.md)). Port 3000 is the website; the
+`db:local` database (port 5433, localhost only) is not a web page and cannot be previewed.
+
 ## 3. Configuration
 
 All configuration is environment variables — documented in [`.env.example`](.env.example) (development) and

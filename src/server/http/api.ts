@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { AppError, forbidden, isAppError, notFound, unauthorized, validationError } from '@/server/errors';
 import {
   GUEST_CART_COOKIE,
+  expiredCookieOptions,
   SESSION_COOKIE,
   sessionCookieOptions,
   validateSessionToken,
@@ -153,7 +154,8 @@ function applyCookies(response: Response, ops: CookieOp[]): Response {
   const res = response instanceof NextResponse ? response : new NextResponse(response.body, response);
   for (const op of ops) {
     if (op.kind === 'set') res.cookies.set(op.name, op.value, op.options);
-    else res.cookies.set(op.name, '', { path: '/', maxAge: 0 });
+    // Repeat the cookie's attributes, or browsers keep SameSite=None / Partitioned cookies.
+    else res.cookies.set(op.name, '', expiredCookieOptions());
   }
   return res;
 }
