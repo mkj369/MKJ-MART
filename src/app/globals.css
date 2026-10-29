@@ -14,7 +14,7 @@
   --color-line: #e7e3db;
   --color-line-strong: #d3cdc1;
   --color-muted: #6b665e;
-  --color-faint: #9a958c;
+  --color-faint: #736e66; /* ≥4.5:1 on paper & bone (WCAG AA) */
   --color-gold: #a88454;
   --color-gold-deep: #84653a;
   --color-gold-light: #d8c39f;

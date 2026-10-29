@@ -18,17 +18,19 @@ export function SupportForm({ defaults }: { defaults: { name: string; email: str
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
-    const parsed = supportRequestSchema.safeParse({
+    const payload = {
       ...values,
       email: values.email || undefined,
       phone: values.phone || undefined,
       orderNumber: values.orderNumber || undefined,
       topic: values.topic || undefined,
-    });
+    };
+    const parsed = supportRequestSchema.safeParse(payload);
     if (!parsed.success) return setErrors(zodFieldErrors(parsed.error));
     setErrors({});
     setLoading(true);
-    const result = await api<{ ticketNumber: string }>('/api/v1/support', { body: parsed.data });
+    // Send the raw values; the server applies the same schema (and its transforms) itself.
+    const result = await api<{ ticketNumber: string }>('/api/v1/support', { body: payload });
     setLoading(false);
     if (!result.ok) {
       if (result.error.fields) setErrors(result.error.fields);

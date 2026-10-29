@@ -1,4 +1,9 @@
+import { randomBytes } from 'node:crypto';
 import { defineConfig, devices } from '@playwright/test';
+
+// Demo accounts get a fresh random password per run (seeded by scripts/e2e-server.ts); nothing
+// guessable is ever committed. Workers inherit it from the main process.
+process.env.E2E_DEMO_PASSWORD ??= `E2e-${randomBytes(9).toString('base64url')}7`;
 
 /**
  * End-to-end tests run against a PRODUCTION build (`npm run build` first) with an isolated,

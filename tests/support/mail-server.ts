@@ -65,7 +65,7 @@ export function parseMail(raw: string, envelope: { from: string; to: string[] })
   return { from: envelope.from, to: envelope.to, subject: decodeHeaderWord(headers.subject ?? ''), text, html, raw };
 }
 
-export async function startMailServer(options: { rejectRecipients?: string[] } = {}) {
+export async function startMailServer(options: { rejectRecipients?: string[]; port?: number } = {}) {
   const inbox: CapturedMail[] = [];
   const server = new SMTPServer({
     secure: false,
@@ -94,7 +94,7 @@ export async function startMailServer(options: { rejectRecipients?: string[] } =
       });
     },
   });
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  await new Promise<void>((resolve) => server.listen(options.port ?? 0, '127.0.0.1', resolve));
   const address = server.server.address();
   const port = typeof address === 'object' && address ? address.port : 0;
   return {

@@ -139,7 +139,7 @@ export const returnRequestSchema = z.object({
     .min(1, 'Choose at least one item to return.')
     .max(50),
   reason: z.enum(RETURN_REASONS, { error: 'Tell us why you are returning the items.' }),
-  note: z.string().trim().max(1000, 'Keep the note under 1,000 characters.').optional().transform((v) => v || null),
+  note: z.string().trim().max(1000, 'Keep the note under 1,000 characters.').nullish().transform((v) => v || null),
   /** Guest access token (order link) when not signed in. */
   token: z.string().max(200).optional(),
 });
@@ -168,7 +168,7 @@ export const supportRequestSchema = z
       .trim()
       .toUpperCase()
       .max(32)
-      .optional()
+      .nullish()
       .transform((v) => v || null)
       .refine((v) => v === null || /^[A-Z0-9-]{6,32}$/.test(v), 'Check the order number.'),
     topic: z.enum(SUPPORT_TOPICS, { error: 'Choose a topic.' }),

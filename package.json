@@ -25,7 +25,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "jobs:send-notifications": "tsx --conditions=react-server scripts/jobs.ts send-notifications"
+    "jobs:send-notifications": "tsx --conditions=react-server scripts/jobs.ts send-notifications",
+    "mail:dev": "tsx scripts/mail-catcher.ts"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.3.1",

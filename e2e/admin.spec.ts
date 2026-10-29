@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
+const DEMO_PASSWORD = process.env.E2E_DEMO_PASSWORD!;
+
 async function adminSignIn(page: Page, email: string, password: string) {
   await page.goto('/admin/login');
   await page.getByLabel('Email').fill(email);
@@ -8,7 +10,7 @@ async function adminSignIn(page: Page, email: string, password: string) {
 }
 
 test('admin confirms and ships an order; stock and timeline update', async ({ page }) => {
-  await adminSignIn(page, 'admin@mkjmart.demo', 'Admin@12345');
+  await adminSignIn(page, 'admin@mkjmart.demo', DEMO_PASSWORD);
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
 
   await page.goto('/admin/orders?status=pending');
@@ -27,7 +29,7 @@ test('admin confirms and ships an order; stock and timeline update', async ({ pa
 });
 
 test('admin can adjust inventory with a ledger entry', async ({ page }) => {
-  await adminSignIn(page, 'admin@mkjmart.demo', 'Admin@12345');
+  await adminSignIn(page, 'admin@mkjmart.demo', DEMO_PASSWORD);
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
   await page.goto('/admin/inventory?q=MKJ-BG-TOT');
   await page.getByTestId('adjust-MKJ-BG-TOT-BLA-ONESIZE').click();
@@ -41,7 +43,7 @@ test('admin can adjust inventory with a ledger entry', async ({ page }) => {
 test('customers are blocked from the admin panel', async ({ page }) => {
   await page.goto('/login');
   await page.getByLabel('Email').fill('customer@mkjmart.demo');
-  await page.getByRole('textbox', { name: 'Password' }).fill('Customer@123');
+  await page.getByRole('textbox', { name: 'Password' }).fill(DEMO_PASSWORD);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByRole('heading', { name: /Hello, Ayesha/ })).toBeVisible();
   await page.goto('/admin');
@@ -52,7 +54,7 @@ test('customers are blocked from the admin panel', async ({ page }) => {
 });
 
 test('staff cannot open store settings', async ({ page }) => {
-  await adminSignIn(page, 'staff@mkjmart.demo', 'Staff@12345');
+  await adminSignIn(page, 'staff@mkjmart.demo', DEMO_PASSWORD);
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Settings' })).toHaveCount(0);
   await page.goto('/admin/settings');
