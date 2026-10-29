@@ -1,11 +1,9 @@
 import 'server-only';
-import { constants } from 'node:fs';
-import { access, mkdir } from 'node:fs/promises';
-import path from 'node:path';
 import { and, count, eq, sql } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { productImages, products, shippingZones, users } from '@/server/db/schema';
-import { appUrl, cookieSecure, cronSecret, demoModeEnabled, isProduction, smsConfig, smtpConfig, sslcommerzConfig, uploadDir } from '@/server/env';
+import { appUrl, cookieSecure, cronSecret, demoModeEnabled, isProduction, smsConfig, smtpConfig, sslcommerzConfig } from '@/server/env';
+import { checkStorage } from '@/server/storage';
 import { JOB_EXPECTED_INTERVAL_MINUTES, JOB_NAMES, listJobRuns } from '@/server/jobs';
 import { POLICY_KEYS } from '@/lib/validation/admin';
 import { getDemoDataSummary } from './demo-data';
@@ -180,20 +178,8 @@ export async function getLaunchChecklist(): Promise<{ checks: LaunchCheck[]; blo
     href: '/admin/shipping',
   });
 
-  let storageOk = true;
-  try {
-    const dir = path.resolve(uploadDir());
-    await mkdir(dir, { recursive: true });
-    await access(dir, constants.W_OK);
-  } catch {
-    storageOk = false;
-  }
-  add({
-    id: 'storage',
-    label: 'Image storage',
-    status: storageOk ? 'ok' : 'fail',
-    detail: storageOk ? `Uploads are written to ${path.resolve(uploadDir())} (must be a persistent volume).` : `UPLOAD_DIR (${uploadDir()}) is not writable.`,
-  });
+  const storage = await checkStorage();
+  add({ id: 'storage', label: 'Image storage', status: storage.ok ? 'ok' : 'fail', detail: storage.detail });
 
   add({
     id: 'backups',

@@ -176,3 +176,43 @@ export function smsConfig(): SmsConfig | null {
   }
   return null;
 }
+
+export type StorageConfig =
+  | { driver: 'local'; dir: string }
+  | {
+      driver: 's3';
+      endpoint: string;
+      region: string;
+      bucket: string;
+      accessKeyId: string;
+      secretAccessKey: string;
+      forcePathStyle: boolean;
+      prefix: string;
+    };
+
+/**
+ * Where uploaded product images live. `local` (default) = UPLOAD_DIR on a persistent volume.
+ * `s3` = any S3-compatible bucket (AWS S3, Cloudflare R2, DigitalOcean Spaces, Backblaze B2, MinIO);
+ * the bucket can stay private because images are served through /media/… by the app.
+ */
+export function storageConfig(): StorageConfig {
+  if ((process.env.STORAGE_DRIVER ?? 'local').toLowerCase() !== 's3') return { driver: 'local', dir: uploadDir() };
+  const endpoint = process.env.S3_ENDPOINT?.trim().replace(/\/+$/, '') ?? '';
+  const bucket = process.env.S3_BUCKET?.trim() ?? '';
+  const accessKeyId = process.env.S3_ACCESS_KEY_ID?.trim() ?? '';
+  const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY?.trim() ?? '';
+  if (!endpoint || !bucket || !accessKeyId || !secretAccessKey) {
+    throw new Error('STORAGE_DRIVER=s3 requires S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY.');
+  }
+  const prefix = (process.env.S3_PREFIX ?? '').trim().replace(/^\/+/, '');
+  return {
+    driver: 's3',
+    endpoint,
+    region: process.env.S3_REGION?.trim() || 'auto',
+    bucket,
+    accessKeyId,
+    secretAccessKey,
+    forcePathStyle: bool(process.env.S3_FORCE_PATH_STYLE, true),
+    prefix: prefix && !prefix.endsWith('/') ? `${prefix}/` : prefix,
+  };
+}

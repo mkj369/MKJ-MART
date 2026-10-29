@@ -1,0 +1,128 @@
+# MKJ MART — production stack for a single Linux server (VPS) with Docker Compose v2.
+#
+#   cp .env.production.example .env.production   # fill in every value (see docs/DEPLOYMENT.md)
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#   docker compose -f docker-compose.prod.yml --env-file .env.production run --rm migrate npm run admin:create -- --email you@yourdomain.com
+#
+# Services: caddy (HTTPS, automatic Let's Encrypt certificates) → app (Next.js) → db (PostgreSQL 17).
+# "migrate" applies database migrations before the app starts; "scheduler" calls the cron endpoints;
+# "backup" writes daily PostgreSQL dumps + uploads archives to the backups volume.
+name: mkj-mart
+
+x-app-env: &app-env
+  NODE_ENV: production
+  DATABASE_URL: postgres://mkj:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/mkj_mart
+  UPLOAD_DIR: /app/uploads
+  TRUST_PROXY: '1' # exactly one trusted proxy (Caddy) in front of the app
+
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp' # HTTP/3
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+
+  app:
+    image: ${APP_IMAGE:-mkj-mart:latest}
+    build:
+      context: .
+      target: runner
+    restart: unless-stopped
+    init: true # forwards SIGTERM so in-flight requests finish on deploys
+    env_file: .env.production
+    environment:
+      <<: *app-env
+    volumes:
+      - uploads:/app/uploads
+    expose:
+      - '3000'
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    logging:
+      driver: json-file
+      options: { max-size: 20m, max-file: '5' }
+
+  # One-shot: applies pending migrations, then exits. Also the image for admin tasks
+  # (`run --rm migrate npm run admin:create …`, `… npm run db:seed`).
+  migrate:
+    image: ${TOOLS_IMAGE:-mkj-mart-tools:latest}
+    build:
+      context: .
+      target: build
+    env_file: .env.production
+    environment:
+      <<: *app-env
+    command: ['npm', 'run', 'db:migrate']
+    restart: 'no'
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mkj
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: mkj_mart
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U mkj -d mkj_mart']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    # Not published to the host: only reachable from the other containers.
+
+  scheduler:
+    image: curlimages/curl:8.16.0
+    restart: unless-stopped
+    environment:
+      CRON_SECRET: ${CRON_SECRET:?set CRON_SECRET}
+      APP_INTERNAL_URL: http://app:3000
+    volumes:
+      - ./deploy/scheduler.sh:/scheduler.sh:ro
+    entrypoint: ['/bin/sh', '/scheduler.sh']
+    depends_on:
+      app:
+        condition: service_healthy
+
+  backup:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      PGUSER: mkj
+      PGDATABASE: mkj_mart
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-24}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+    volumes:
+      - ./deploy/backup.sh:/backup.sh:ro
+      - uploads:/uploads:ro
+      - ${BACKUP_DIR:-./backups}:/backups
+    entrypoint: ['/bin/sh', '/backup.sh']
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  uploads:
+  caddy_data:
+  caddy_config:

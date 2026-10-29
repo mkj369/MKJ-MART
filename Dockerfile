@@ -5,7 +5,7 @@
 #   docker run -p 3000:3000 --env-file .env.production -v mkj_uploads:/app/uploads mkj-mart
 #
 # The "build" stage keeps the full toolchain and is reused for one-off tasks
-# (migrations, seeding, creating the first admin) — see docker-compose.yml.
+# (migrations, seeding, creating the first admin) — see docker-compose.prod.yml (service "migrate").
 
 FROM node:22-bookworm-slim AS deps
 WORKDIR /app
@@ -29,11 +29,11 @@ ENV NODE_ENV=production \
     UPLOAD_DIR=/app/uploads
 RUN groupadd --system --gid 1001 nodejs && useradd --system --uid 1001 --gid nodejs nextjs \
     && mkdir -p /app/uploads && chown nextjs:nodejs /app/uploads
-COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
-COPY --from=build --chown=nextjs:nodejs /app/public ./public
-USER nextjs
+COPY --from=build --chown=1001:1001 /app/.next/standalone ./
+COPY --from=build --chown=1001:1001 /app/.next/static ./.next/static
+COPY --from=build --chown=1001:1001 /app/public ./public
+USER 1001:1001
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD ["node", "-e", "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
 CMD ["node", "server.js"]
