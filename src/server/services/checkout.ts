@@ -15,6 +15,7 @@ import {
   productVariants,
   sizes,
   stockMovements,
+  users,
 } from '@/server/db/schema';
 import { appUrl, paymentTimeoutMinutes, sslcommerzConfig } from '@/server/env';
 import { AppError, badRequest, conflict, isUniqueViolation, unauthorized, validationError } from '@/server/errors';
@@ -208,6 +209,9 @@ export async function placeOrder(input: CheckoutInput, ctx: PlaceOrderContext): 
   if (input.paymentMethod === 'cod' && !settings.codEnabled) {
     throw badRequest('Cash on Delivery is currently unavailable.', 'PAYMENT_METHOD_UNAVAILABLE');
   }
+  // Orders placed by fictional demo accounts are demo data too, so "Remove demo data" can purge them
+  // (the seed flags its own orders the same way).
+  const [buyer] = ctx.userId ? await db.select({ isDemo: users.isDemo }).from(users).where(eq(users.id, ctx.userId)).limit(1) : [];
   const gateway = sslcommerzConfig();
   if (input.paymentMethod === 'sslcommerz') {
     if (!settings.onlinePaymentEnabled || !gateway) {
@@ -341,6 +345,7 @@ export async function placeOrder(input: CheckoutInput, ctx: PlaceOrderContext): 
         .values({
           orderNumber,
           userId: ctx.userId,
+          isDemo: buyer?.isDemo ?? false,
           customerName: input.contact.name,
           email: input.contact.email ?? null,
           phone: input.contact.phone,

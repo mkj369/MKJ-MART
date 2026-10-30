@@ -14,6 +14,8 @@ import {
 import { can, isStaffRole, type Permission } from '@/lib/permissions';
 import { zodFieldErrors } from '@/lib/validation/common';
 import { log } from '@/server/logger';
+import { guestCartIdFrom, sessionTokenFrom } from '@/server/auth/transport';
+import { CLEAR_VALUE, headerSessionsEnabled, SET_CART_HEADER, SET_SESSION_HEADER } from '@/lib/session-transport';
 import { clientIp, isSameOriginRequest, userAgent } from './request';
 
 type CookieOp =
@@ -28,6 +30,8 @@ export type ApiContext<P> = {
   ip: string | null;
   userAgent: string | null;
   guestCartId: string | null;
+  /** The presented session token (cookie, or preview header fallback), valid or not. */
+  sessionToken: string | null;
   /** Throws 401 unless signed in. */
   requireUser(): SessionUser;
   /** Throws 401/403 unless the user is staff with the given permission. */
@@ -72,7 +76,7 @@ export function route<P extends Record<string, string> = Record<string, never>>(
         throw new AppError(403, 'CSRF_REJECTED', 'Cross-site request blocked.');
       }
 
-      const token = req.cookies.get(SESSION_COOKIE)?.value;
+      const token = sessionTokenFrom(req.cookies, req.headers);
       const session = token ? await validateSessionToken(token, { slide: true }) : null;
       if (token && !session) cookieOps.push({ kind: 'delete', name: SESSION_COOKIE });
       if (session?.refreshed && token) {
@@ -93,7 +97,8 @@ export function route<P extends Record<string, string> = Record<string, never>>(
         user,
         ip: clientIp(req.headers),
         userAgent: userAgent(req.headers),
-        guestCartId: req.cookies.get(GUEST_CART_COOKIE)?.value ?? null,
+        guestCartId: guestCartIdFrom(req.cookies, req.headers),
+        sessionToken: token,
         requireUser() {
           if (!user) throw unauthorized();
           return user;
@@ -156,6 +161,13 @@ function applyCookies(response: Response, ops: CookieOp[]): Response {
     if (op.kind === 'set') res.cookies.set(op.name, op.value, op.options);
     // Repeat the cookie's attributes, or browsers keep SameSite=None / Partitioned cookies.
     else res.cookies.set(op.name, '', expiredCookieOptions());
+  }
+  // Preview header fallback (src/lib/session-transport.ts): mirror session / guest-bag changes.
+  if (headerSessionsEnabled()) {
+    for (const op of ops) {
+      const header = op.name === SESSION_COOKIE ? SET_SESSION_HEADER : op.name === GUEST_CART_COOKIE ? SET_CART_HEADER : null;
+      if (header) res.headers.set(header, op.kind === 'set' ? op.value : CLEAR_VALUE);
+    }
   }
   return res;
 }

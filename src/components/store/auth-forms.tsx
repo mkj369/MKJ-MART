@@ -28,6 +28,30 @@ function PasswordInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   );
 }
 
+type SessionCheck = { user: { id: string } | null; sessionCheck?: { sessionReceived: boolean; probeReceived: boolean } };
+
+/**
+ * After a successful sign-in, confirm the browser really kept the session cookie before moving on.
+ * Some embedded previews, proxies and privacy settings drop cookies; without this check the next
+ * page silently signs the user out again and the form appears to do nothing. Returns an error
+ * message, or null when the session works.
+ */
+async function confirmSession(lead: string): Promise<string | null> {
+  let probe: 'visible' | 'missing' | 'blocked';
+  try {
+    probe = document.cookie.split(';').some((c) => c.trim().startsWith('mkj_cookie_check=')) ? 'visible' : 'missing';
+  } catch {
+    probe = 'blocked'; // sandboxed frames without their own origin cannot use cookies at all
+  }
+  const result = await api<SessionCheck>(`/api/v1/auth/me?check=1&probe=${probe}`);
+  if (result.ok && result.data.user) return null;
+  if (!result.ok) return `${lead}, but we could not confirm your session. Please reload the page and try again.`;
+  if (probe === 'visible' && !result.data.sessionCheck?.probeReceived) {
+    return `${lead}, but cookies from this site are not reaching the server, so you would be signed out again on the next page. Something between your browser and the site (such as a preview proxy) is removing them.`;
+  }
+  return `${lead}, but this browser window did not keep the sign-in cookie, so you would be signed out again on the next page. Allow cookies for this site, or open it in a regular browser tab, and try again.`;
+}
+
 export function LoginForm({
   next,
   endpoint = '/api/v1/auth/login',
@@ -57,6 +81,12 @@ export function LoginForm({
       setLoading(false);
       if (result.error.fields) setErrors(result.error.fields);
       else setFormError(result.error.message);
+      return;
+    }
+    const problem = await confirmSession('Your password was accepted');
+    if (problem) {
+      setLoading(false);
+      setFormError(problem);
       return;
     }
     router.replace(next);
@@ -115,6 +145,12 @@ export function RegisterForm({ next, loginHref }: { next: string; loginHref: str
       setLoading(false);
       if (result.error.fields) setErrors(result.error.fields);
       else setFormError(result.error.message);
+      return;
+    }
+    const problem = await confirmSession('Your account was created');
+    if (problem) {
+      setLoading(false);
+      setFormError(problem);
       return;
     }
     router.replace(next);
@@ -223,6 +259,12 @@ export function ResetPasswordForm({ token }: { token: string }) {
       setLoading(false);
       if (result.error.fields) setErrors(result.error.fields);
       else setFormError(result.error.message);
+      return;
+    }
+    const problem = await confirmSession('Your password was changed');
+    if (problem) {
+      setLoading(false);
+      setFormError(problem);
       return;
     }
     router.replace('/account?password=reset');

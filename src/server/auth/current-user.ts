@@ -1,17 +1,18 @@
 import 'server-only';
 import { cache } from 'react';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { can, isStaffRole, type Permission } from '@/lib/permissions';
-import { SESSION_COOKIE, validateSessionToken, type SessionUser } from './session';
+import { validateSessionToken, type SessionUser } from './session';
+import { sessionTokenFrom } from './transport';
 
 /**
  * Session lookup for Server Components / pages, de-duplicated per request with React `cache`.
  * (Route handlers use `src/server/http/api.ts`, which reads cookies from the Request instead.)
  */
 export const getCurrentSession = cache(async () => {
-  const store = await cookies();
-  return validateSessionToken(store.get(SESSION_COOKIE)?.value);
+  const [store, requestHeaders] = await Promise.all([cookies(), headers()]);
+  return validateSessionToken(sessionTokenFrom(store, requestHeaders));
 });
 
 export async function getCurrentUser(): Promise<SessionUser | null> {

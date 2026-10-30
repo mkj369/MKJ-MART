@@ -19,6 +19,8 @@ integration and E2E tests) and a production rehearsal behind Caddy over HTTPS.
 | 9 | Low | Online payment allowed totals outside SSLCommerz's ৳10–৳5,00,000 range (gateway error after the order was created). | Rejected before order creation and hidden in the quote. |
 | 10 | Low | Text colour `text-faint` failed WCAG AA contrast. | Raised to ≥4.5:1 (axe scans now clean on ten pages). |
 | 11 | Low | `CSP_FRAME_ANCESTORS='self'` from the env examples reached the header as a bare `self` (env parsers strip the quotes) — a host named "self", so the documented setting did not mean what it said. Sign-out cleared cookies with a bare `Max-Age=0`, without their attributes. | Bare `self`/`none` are re-quoted; cookies are cleared with their full attribute set. Unit-tested. |
+| 12 | **High** | In the Arena preview, sign-in, registration, the guest bag and the admin panel did not work: the preview proxy strips the `Cookie` request header (packet capture: 0 of 190 requests carried cookies), and the forms then bounced users back to the sign-in page without any error. | Sign-in confirms the session took effect and explains the failure (logged as `auth.session_check_failed`). An opt-in, DEMO_MODE-only header fallback (`SESSION_HEADER_FALLBACK`) carries the session and bag. Verified in the real preview; regression-tested behind a cookie-stripping proxy (`e2e/preview-proxy.spec.ts`). |
+| 13 | Medium | Orders placed by demo accounts through the live checkout were stored as real orders, so "Remove demo data" kept them and the demo account they pin. | Orders inherit the buyer's demo flag (integration-tested, verified live). |
 
 ## Verified controls
 
@@ -33,7 +35,10 @@ integration and E2E tests) and a production rehearsal behind Caddy over HTTPS.
   cross-site iframe (e.g. a hosted preview panel) needs both `CSP_FRAME_ANCESTORS` listing the embedding origins
   and `COOKIE_SAMESITE=none`, which forces `Secure; Partitioned` so browsers that block third-party cookies keep
   a per-embedder jar. CSRF checks do not rely on SameSite, but keep both defaults on a real store: letting other
-  sites frame a signed-in store invites clickjacking.
+  sites frame a signed-in store invites clickjacking. Previews whose proxy strips cookies can also enable
+  `SESSION_HEADER_FALLBACK` (ignored unless `DEMO_MODE=true`): the token travels only in a same-origin custom header,
+  which browsers never attach cross-site (the same-origin check still applies to every mutation), but it is readable
+  by page scripts and kept in sessionStorage, so it is for demo previews only.
 * **Rate limits**: login, registration, checkout, tracking, password reset, returns, support, payment retry,
   notification tests; behind Caddy (`TRUST_PROXY=1`) spoofed `X-Forwarded-For` does not bypass them (verified).
 * **Input validation**: Zod on every body/query; UUID guards on path ids; JSON-only bodies ≤ 256 KB.

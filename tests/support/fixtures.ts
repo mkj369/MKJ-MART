@@ -60,7 +60,7 @@ export async function createProduct(options: { price?: number; compareAtPrice?: 
   return { product: product!, variants };
 }
 
-export async function createUser(options: { role?: Role; email?: string; password?: string; status?: 'active' | 'blocked'; phone?: string | null } = {}) {
+export async function createUser(options: { role?: Role; email?: string; password?: string; status?: 'active' | 'blocked'; phone?: string | null; isDemo?: boolean } = {}) {
   const password = options.password ?? 'Passw0rd!';
   const [user] = await db
     .insert(users)
@@ -70,6 +70,7 @@ export async function createUser(options: { role?: Role; email?: string; passwor
       phone: options.phone ?? null,
       role: options.role ?? 'customer',
       status: options.status ?? 'active',
+      isDemo: options.isDemo ?? false,
       passwordHash: await hashPassword(password),
     })
     .returning();

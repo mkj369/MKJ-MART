@@ -21,7 +21,9 @@ const MAIL_HTTP_PORT = Number(process.env.E2E_MAIL_HTTP_PORT ?? 3126);
 
 async function main() {
   const base = new URL(process.env.E2E_DATABASE_URL ?? requireDatabaseUrl());
-  if (!process.env.E2E_DATABASE_URL) base.pathname = '/mkj_e2e';
+  // E2E_DB_NAME lets a second instance (the preview-proxy project) use its own database.
+  if (process.env.E2E_DB_NAME) base.pathname = `/${process.env.E2E_DB_NAME}`;
+  else if (!process.env.E2E_DATABASE_URL) base.pathname = '/mkj_e2e';
   const dbName = base.pathname.slice(1);
   if (!/^mkj_e2e/.test(dbName)) throw new Error(`Refusing to reset "${dbName}": E2E database names must start with mkj_e2e.`);
 

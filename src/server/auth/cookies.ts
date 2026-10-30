@@ -31,3 +31,14 @@ export function guestCartCookieOptions() {
 export function expiredCookieOptions() {
   return { ...baseCookieOptions(), maxAge: 0 };
 }
+
+/**
+ * Non-secret marker ("1") set next to every new session cookie, with the same attributes but
+ * readable by JavaScript and short-lived. After signing in, the browser checks it to tell apart
+ * "the browser did not keep cookies" from "cookies are not reaching the server" (see confirmSession).
+ */
+export const SESSION_CHECK_COOKIE = 'mkj_cookie_check';
+
+export function sessionCheckCookieOptions() {
+  return { ...baseCookieOptions(), httpOnly: false, maxAge: 300 };
+}

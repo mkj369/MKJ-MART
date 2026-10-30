@@ -51,6 +51,19 @@ describe('placing a Cash on Delivery order', () => {
     expect(events.length).toBeGreaterThan(0);
   });
 
+  it('flags orders placed by demo accounts as demo data, and only those', async () => {
+    const { variants } = await createProduct({ price: 50_000, stock: { M: 5 } });
+    const { user: demoUser } = await createUser({ isDemo: true });
+    const { user: realUser } = await createUser();
+    const demoOrder = await placeOrder(checkoutInput(), { userId: demoUser.id, cartId: await cartWith(variants.M!.id, 1, demoUser.id) });
+    const realOrder = await placeOrder(checkoutInput(), { userId: realUser.id, cartId: await cartWith(variants.M!.id, 1, realUser.id) });
+    const guestOrder = await placeOrder(checkoutInput(), { userId: null, cartId: await cartWith(variants.M!.id, 1) });
+    const flag = async (id: string) => (await db.select({ isDemo: orders.isDemo }).from(orders).where(eq(orders.id, id)))[0]!.isDemo;
+    expect(await flag(demoOrder.orderId)).toBe(true);
+    expect(await flag(realOrder.orderId)).toBe(false);
+    expect(await flag(guestOrder.orderId)).toBe(false);
+  });
+
   it('applies free delivery at the configured threshold', async () => {
     const { variants } = await createProduct({ price: 600_000, stock: { M: 3 } });
     const cartId = await cartWith(variants.M!.id, 1);

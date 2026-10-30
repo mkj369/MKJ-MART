@@ -1,8 +1,8 @@
 import 'server-only';
 import { cache } from 'react';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { getCurrentSession } from '@/server/auth/current-user';
-import { GUEST_CART_COOKIE } from '@/server/auth/session';
+import { guestCartIdFrom } from '@/server/auth/transport';
 import { sslcommerzConfig } from '@/server/env';
 import { findCartId, getCartCount } from '@/server/services/cart';
 import { getCategoryTree, getCollections, hasDemoCatalog } from '@/server/services/catalog';
@@ -13,8 +13,8 @@ import { getWishlistIds } from '@/server/services/wishlist';
 export const getStoreShell = cache(async () => {
   const session = await getCurrentSession();
   const user = session?.user ?? null;
-  const cookieStore = await cookies();
-  const cartId = await findCartId({ userId: user?.id ?? null, guestCartId: cookieStore.get(GUEST_CART_COOKIE)?.value ?? null });
+  const [cookieStore, requestHeaders] = await Promise.all([cookies(), headers()]);
+  const cartId = await findCartId({ userId: user?.id ?? null, guestCartId: guestCartIdFrom(cookieStore, requestHeaders) });
 
   const [cartCount, wishlistIds, tree, collections, settings, demo] = await Promise.all([
     getCartCount(cartId),

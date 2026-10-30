@@ -1,5 +1,8 @@
 import type { Metadata, Viewport } from 'next';
+import { headers } from 'next/headers';
 import { Toaster } from 'sonner';
+import { HeaderSessionSync } from '@/components/header-session-sync';
+import { headerSessionScript, headerSessionsEnabled } from '@/lib/session-transport';
 import { bengali, cormorant, jost, taka } from './fonts';
 import './globals.css';
 
@@ -24,15 +27,24 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Preview-only header fallback for proxies that strip cookies (src/lib/session-transport.ts).
+  const headerSessions = headerSessionsEnabled();
+  const nonce = headerSessions ? ((await headers()).get('x-nonce') ?? undefined) : undefined;
   return (
     <html
       lang="en-BD"
       className={`${jost.variable} ${cormorant.variable} ${taka.variable} ${bengali.variable}`}
       data-scroll-behavior="smooth"
     >
+      {headerSessions ? (
+        <head>
+          <script nonce={nonce} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: headerSessionScript() }} />
+        </head>
+      ) : null}
       <body className="min-h-dvh">
         {children}
+        {headerSessions ? <HeaderSessionSync /> : null}
         <Toaster
           position="bottom-center"
           toastOptions={{

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { frameAncestorsSources } from '@/lib/csp';
+import { headerSessionsEnabled, SESSION_HEADER } from '@/lib/session-transport';
 
 /**
  * Runs before page routes:
@@ -27,7 +28,8 @@ function contentSecurityPolicy(nonce: string, isDev: boolean): string {
 
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
-  const hasSession = request.cookies.has(SESSION_COOKIE);
+  // The preview header fallback (src/lib/session-transport.ts) carries the session in a header.
+  const hasSession = request.cookies.has(SESSION_COOKIE) || (headerSessionsEnabled() && request.headers.has(SESSION_HEADER));
 
   if (pathname.startsWith('/admin') && pathname !== '/admin/login' && !hasSession) {
     const url = request.nextUrl.clone();

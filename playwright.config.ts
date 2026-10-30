@@ -14,6 +14,11 @@ process.env.E2E_DEMO_PASSWORD ??= `E2e-${randomBytes(9).toString('base64url')}7`
  */
 const port = Number(process.env.E2E_PORT ?? 3100);
 const baseURL = process.env.E2E_BASE_URL ?? `http://localhost:${port}`;
+// preview-proxy project: a second instance with the header fallback behind a proxy that strips
+// cookies (like the Arena preview), plus a control proxy in front of the normal instance.
+const previewPort = 3200;
+const previewProxyPort = 3201;
+const controlProxyPort = Number(process.env.E2E_CONTROL_PROXY_PORT ?? 3101);
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || undefined;
 const extraArgs = process.env.PLAYWRIGHT_CHROMIUM_ARGS?.split(' ').filter(Boolean) ?? [];
 
@@ -32,16 +37,50 @@ export default defineConfig({
     launchOptions: { executablePath, args: extraArgs },
   },
   projects: [
-    { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1366, height: 900 } } },
+    { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1366, height: 900 } }, testIgnore: /preview-proxy\.spec\.ts/ },
     { name: 'mobile', use: { ...devices['Pixel 7'] }, testMatch: /storefront\.spec\.ts/ },
+    {
+      name: 'preview-proxy',
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1366, height: 900 }, baseURL: `http://localhost:${previewProxyPort}` },
+      testMatch: /preview-proxy\.spec\.ts/,
+    },
   ],
   webServer: process.env.E2E_BASE_URL
     ? undefined
-    : {
-        command: 'npx tsx scripts/e2e-server.ts',
-        url: `${baseURL}/api/v1/health`,
-        reuseExistingServer: !process.env.CI,
-        timeout: 240_000,
-        stdout: 'pipe',
-      },
+    : [
+        {
+          command: 'npx tsx scripts/e2e-server.ts',
+          url: `${baseURL}/api/v1/health`,
+          reuseExistingServer: !process.env.CI,
+          timeout: 240_000,
+          stdout: 'pipe',
+        },
+        {
+          command: 'npx tsx scripts/e2e-server.ts',
+          url: `http://localhost:${previewPort}/api/v1/health`,
+          env: {
+            E2E_PORT: String(previewPort),
+            E2E_SMTP_PORT: '3225',
+            E2E_MAIL_HTTP_PORT: '3226',
+            E2E_DB_NAME: 'mkj_e2e_preview',
+            SESSION_HEADER_FALLBACK: 'true',
+          },
+          reuseExistingServer: !process.env.CI,
+          timeout: 240_000,
+        },
+        {
+          command: 'npx tsx scripts/cookie-stripping-proxy.ts',
+          url: `http://localhost:${previewProxyPort}/api/v1/health`,
+          env: { PROXY_PORT: String(previewProxyPort), PROXY_TARGET: `http://127.0.0.1:${previewPort}` },
+          reuseExistingServer: !process.env.CI,
+          timeout: 240_000,
+        },
+        {
+          command: 'npx tsx scripts/cookie-stripping-proxy.ts',
+          url: `http://localhost:${controlProxyPort}/api/v1/health`,
+          env: { PROXY_PORT: String(controlProxyPort), PROXY_TARGET: `http://127.0.0.1:${port}` },
+          reuseExistingServer: !process.env.CI,
+          timeout: 240_000,
+        },
+      ],
 });

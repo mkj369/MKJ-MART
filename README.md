@@ -9,8 +9,8 @@ zones, returns & refunds, email/SMS notifications and a complete back office.
 | --- | --- |
 | Home, shop with search/filters/sort/pagination, collections, product pages (sizes, colours, live stock), bag, checkout (COD / online), order page with "Pay now" retry, public tracking with courier links, accounts (profile, addresses, history, wishlist, password, **forgot-password by email**), **return requests**, **Help & contact** page with FAQ and contact form | Dashboard, orders workflow (tracking links, notifications log, gateway reconciliation, refund ledger), **returns**, **support inbox**, products & variants & images, inventory ledger, categories, collections, sizes & colours, customers & roles, coupons, delivery zones, settings (business details, notifications with test send, returns, policies with review flags), **launch-readiness checklist**, scheduled-job heartbeats, safe demo-data removal |
 
-> **Status (honest):** builds, migrates on an empty database and passes 227 unit/integration tests (1 more
-> runs only in CI against an S3 server that checks signatures) and 24 browser E2E tests. The full production stack (standalone build behind Caddy HTTPS, migrations,
+> **Status (honest):** builds, migrates on an empty database and passes 244 unit/integration tests (1 more
+> runs only in CI against an S3 server that checks signatures) and 35 browser E2E tests. The full production stack (standalone build behind Caddy HTTPS, migrations,
 > first-admin procedure, scheduler, backups and a restore) was rehearsed end-to-end. **Not verified:**
 > SSLCommerz against the real sandbox (needs credentials; see [docs/SSLCOMMERZ.md](docs/SSLCOMMERZ.md)),
 > real SMTP/SMS providers (tested with a local SMTP server and a local HTTP SMS gateway), and the Docker
@@ -92,13 +92,18 @@ the repository or shown in the UI. For a stable local password set `DEMO_ACCOUNT
 | `npm run lint` · `typecheck` · `test` · `test:e2e` | Quality gates |
 
 **Embedded preview (iframe).** Hosted preview panels show the site inside a cross-site iframe, where the default
-`frame-ancestors 'self'` policy blocks it and browsers drop `SameSite=Lax` cookies (no cart, no sign-in). For such
-a demo preview only, run the production build with:
+`frame-ancestors 'self'` policy blocks it and browsers drop `SameSite=Lax` cookies (no cart, no sign-in). Some
+preview proxies also strip the `Cookie` request header entirely (observed in the Arena preview: sign-in succeeded
+but every following request was anonymous). For such a demo preview only, run the production build with:
 
 ```bash
 npm run build
-DEMO_MODE=true COOKIE_SAMESITE=none CSP_FRAME_ANCESTORS="self https:" npx next start -H 0.0.0.0 -p 3000
+DEMO_MODE=true SESSION_HEADER_FALLBACK=true COOKIE_SAMESITE=none CSP_FRAME_ANCESTORS="self https:" \
+  npx next start -H 0.0.0.0 -p 3000
 ```
+
+`SESSION_HEADER_FALLBACK` carries the session and guest bag in `x-mkj-*` headers when cookies do not come back
+(see `src/lib/session-transport.ts`); it only works together with `DEMO_MODE=true`.
 
 Keep the defaults on a real store (see [docs/SECURITY.md](docs/SECURITY.md)). Port 3000 is the website; the
 `db:local` database (port 5433, localhost only) is not a web page and cannot be previewed.
@@ -166,8 +171,8 @@ credentials** — run `npm run payments:sandbox-check` and the checklist in [doc
 ## 7. Testing
 
 ```bash
-npm test                              # 212 unit + integration tests (real PostgreSQL, real SMTP server; +1 S3 test in CI)
-npm run build && npm run test:e2e     # 24 Playwright scenarios (desktop + mobile) against the production build
+npm test                              # 244 unit + integration tests (real PostgreSQL, real SMTP server; +1 S3 test in CI)
+npm run build && npm run test:e2e     # 35 Playwright scenarios (desktop, mobile, cookie-stripping preview proxy)
 ```
 
 * **Unit**: money/phone/geo, coupons, delivery, order & return state machines, RBAC, password hashing, CSRF/IP,

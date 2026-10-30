@@ -1,13 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { ShoppingBag } from 'lucide-react';
 import { buttonClasses } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/feedback';
 import { CheckoutForm } from '@/components/store/checkout-form';
 import { getCurrentUser } from '@/server/auth/current-user';
-import { GUEST_CART_COOKIE } from '@/server/auth/session';
+import { guestCartIdFrom } from '@/server/auth/transport';
 import { listAddresses } from '@/server/services/account';
 import { findCartId } from '@/server/services/cart';
 import { getCheckoutQuote } from '@/server/services/checkout';
@@ -16,10 +16,10 @@ import { getSetting } from '@/server/services/settings';
 export const metadata: Metadata = { title: 'Checkout' };
 
 export default async function CheckoutPage() {
-  const [user, cookieStore, settings] = await Promise.all([getCurrentUser(), cookies(), getSetting('checkout')]);
+  const [user, cookieStore, requestHeaders, settings] = await Promise.all([getCurrentUser(), cookies(), headers(), getSetting('checkout')]);
   if (!user && !settings.guestCheckoutEnabled) redirect('/login?next=/checkout');
 
-  const cartId = await findCartId({ userId: user?.id ?? null, guestCartId: cookieStore.get(GUEST_CART_COOKIE)?.value ?? null });
+  const cartId = await findCartId({ userId: user?.id ?? null, guestCartId: guestCartIdFrom(cookieStore, requestHeaders) });
   const addresses = user ? await listAddresses(user.id) : [];
   const defaultAddress = addresses.find((a) => a.isDefault) ?? addresses[0];
   const quote = await getCheckoutQuote(cartId, { district: defaultAddress?.district, couponCode: undefined }, { userId: user?.id ?? null });

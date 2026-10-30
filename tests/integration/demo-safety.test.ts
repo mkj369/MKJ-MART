@@ -85,14 +85,17 @@ describe('demo data purge never removes real records', () => {
     // ── Accounts ──
     const { user: demoShopper } = await createUser({ email: `shopper-${uid()}@mkjmart.demo` });
     const { user: demoIdle } = await createUser({ email: `idle-${uid()}@mkjmart.demo` });
-    await db.update(users).set({ isDemo: true }).where(inArray(users.id, [demoShopper.id, demoIdle.id]));
     const { user: realAdmin } = await createUser({ role: 'admin' });
     const { user: demoAdmin } = await createUser({ role: 'admin', email: `admin-${uid()}@mkjmart.demo` });
     await db.update(users).set({ isDemo: true }).where(eq(users.id, demoAdmin.id));
 
     // ── Orders ──
-    // A REAL order (not flagged) that bought a demo product with a demo coupon, placed by a demo account.
+    // A REAL order (not flagged) that bought a demo product with a demo coupon, linked to an account
+    // that is flagged demo. Live checkouts by demo accounts are demo orders themselves (see
+    // checkout.test.ts), so the order is placed first and the account flagged afterwards, as in
+    // older data or an account re-flagged later; the purge must still keep both.
     const realOrder = await buyOnce(soldDemo.variants.M!.id, { userId: demoShopper.id, couponCode: demoCoupon.code });
+    await db.update(users).set({ isDemo: true }).where(inArray(users.id, [demoShopper.id, demoIdle.id]));
     // A DEMO order that used a REAL coupon.
     const demoOrder = await buyOnce(real.variants.M!.id, { couponCode: realCoupon.code });
     await db.update(orders).set({ isDemo: true }).where(eq(orders.id, demoOrder.orderId));

@@ -5,11 +5,13 @@ import {
   SESSION_COOKIE,
   sessionCookieOptions,
 } from '@/server/auth/session';
+import { SESSION_CHECK_COOKIE, sessionCheckCookieOptions } from '@/server/auth/cookies';
 import { ensureCart, findCartId } from '@/server/services/cart';
 import type { ApiContext } from './api';
 
 export function issueSessionCookie<P>(ctx: ApiContext<P>, token: string, expiresAt: Date) {
   ctx.setCookie(SESSION_COOKIE, token, sessionCookieOptions(expiresAt));
+  ctx.setCookie(SESSION_CHECK_COOKIE, '1', sessionCheckCookieOptions());
 }
 
 /** The current shopper's cart id (account cart when signed in, otherwise the guest cookie cart). */
