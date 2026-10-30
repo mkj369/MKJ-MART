@@ -1,0 +1,33 @@
+# Caddy terminates TLS with automatic Let's Encrypt certificates (ports 80/443 must reach this
+# server and DOMAIN must resolve to it). The app itself sends the security headers (CSP, HSTS…).
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Product image uploads are up to 8 MB.
+	request_body {
+		max_size 12MB
+	}
+
+	# Adds X-Forwarded-For / -Proto / -Host; the app trusts exactly one proxy (TRUST_PROXY=1).
+	reverse_proxy {$APP_UPSTREAM:app:3000} {
+		health_uri /api/v1/health
+		health_interval 30s
+	}
+
+	# The cron endpoints are only for the internal scheduler.
+	@cron path /api/cron/*
+	respond @cron 404
+
+	log {
+		output stdout
+		format json
+	}
+}
+
+www.{$DOMAIN} {
+	redir https://{$DOMAIN}{uri} permanent
+}
